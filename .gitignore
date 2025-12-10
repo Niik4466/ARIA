@@ -3,12 +3,17 @@ venv/
 env/
 ENV/
 .venv
+rvc/rvc_venv/
+aria_venv/
 
 # Python Bytecode
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
+
+# Python
+__init__.py
 
 # Distribution / packaging
 .Python
@@ -110,3 +115,10 @@ cache/
 
 # Others
 todo.md
+
+# RAG
+documents/*
+.chroma_db/*
+
+# Logs
+logs/*

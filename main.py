@@ -4,7 +4,7 @@ Asistente de Voz Interactivo - Punto de Entrada.
 Arquitectura General:
 ┌─────────────────────────────────────────────────────────────┐
 │                    MAIN                                     │
-│  Orquesta dos threads paralelos:                           │
+│  Orquesta dos threads paralelos:                            │
 │  1. listen_for_hotkey: Detecta Ctrl+Alt+Espacio (presionar) │
 │  2. process_audio: Procesa audio grabado en tiempo real     │
 └─────────────────────────────────────────────────────────────┘
@@ -86,7 +86,7 @@ def listen_for_hotkey(mic: MicrophoneStream, audio_queue: "queue.Queue"):
             # ════════════════════════════════════════════════════
             has_ctrl = keyboard.Key.ctrl_l in pressed_keys or keyboard.Key.ctrl_r in pressed_keys
             if has_ctrl and isinstance(key, keyboard.KeyCode) and key.char == 'c':
-                print("\n👋 Cerrando por Ctrl+C…")
+                print("\n[Main]👋 Cerrando por Ctrl+C…")
                 stop_event.set()  # Señal global de cierre
                 return False  # Detiene el listener de pynput
 
@@ -98,7 +98,7 @@ def listen_for_hotkey(mic: MicrophoneStream, audio_queue: "queue.Queue"):
             has_space = keyboard.Key.space in pressed_keys
 
             if has_ctrl and has_alt and has_space and not is_recording:
-                print("🎤 Ctrl+Alt+Espacio presionado → Escuchando…")
+                print("[Main] 🎤 Ctrl+Alt+Espacio presionado → Escuchando…")
                 is_recording = True
                 mic.start_listening()
 
@@ -123,7 +123,7 @@ def listen_for_hotkey(mic: MicrophoneStream, audio_queue: "queue.Queue"):
 
             # Si estamos grabando pero la combo se rompió → parar
             if is_recording and not (has_ctrl and has_alt and has_space):
-                print("🔴 Teclas soltadas → Deteniendo grabación…")
+                print("[Main] 🔴 Teclas soltadas → Deteniendo grabación…")
                 mic.stop_listening()
                 is_recording = False
 
@@ -152,12 +152,12 @@ def process_audio(mic: MicrophoneStream, app, audio_queue: "queue.Queue"):
             continue
 
         # Procesar todas las frames capturadas durante la pulsación como UN SOLO prompt
-        print("🗣️  Procesando audio capturado…")
+        print("[Main] 🗣️  Procesando audio capturado…")
         state = {"frames": frames}
         result = app.invoke(state)
-        print(f"👤 Tú: {result.get('user_text', '')}")
-        print(f"🤖 Bot: {result.get('reply_text', '')}")
-        print("—")
+        print(f"[Main] 👤 Tú: {result.get('user_text', '')}")
+        print(f"[Main] 🤖 Bot: {result.get('reply_text', '')}")
+        print("\n")
 
 
 def main():
@@ -217,7 +217,7 @@ def main():
                 threading.Event().wait(0.2)
         except KeyboardInterrupt:
             # Fallback por si acaso 
-            print("\n👋 Cerrando…")
+            print("\n[Main]👋 Cerrando…")
             stop_event.set()
 
 

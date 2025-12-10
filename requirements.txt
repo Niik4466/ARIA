@@ -8,3 +8,8 @@ requests==2.32.3
 edge-tts
 soundfile==0.12.1
 pynput==1.7.6
+kokoro>=0.9.4
+chromadb
+pypdf
+ollama
+ddgs
