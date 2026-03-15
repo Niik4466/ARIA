@@ -62,11 +62,13 @@ profile_default/
 ipython_config.py
 
 # RVC Models (Large files)
-rvc_models/
+rvc_models/*
 *.pth
 *.onnx
 *.safetensors
-models/
+
+# RVC library
+src/rvc/rvc_webui/
 
 # Audio Files
 *.wav
@@ -76,6 +78,7 @@ models/
 *.aac
 tmp_audio/
 audio_cache/
+ref_voice/
 
 # Temporary Files
 *.tmp
@@ -118,7 +121,7 @@ todo.md
 
 # RAG
 documents/*
-.chroma_db/*
+.chroma_db/
 
 # Logs
 logs/*
