@@ -35,23 +35,7 @@ if not "%RESPONSE_MODEL%"=="%DECISOR_MODEL%" (
 echo [INFO] Pulling embedding model: nomic-embed-text
 call ollama pull nomic-embed-text
 
-REM 3. Start RVC API
-echo [INIT] Recently checking RVC environment...
-if not exist "rvc\rvc_venv" (
-    echo [ERROR] 'rvc\rvc_venv' directory not found. Please run install-windows.bat first.
-    pause
-    exit /b 1
-)
 
-echo [INIT] Launching RVC API (Port 5050, CUDA) in background...
-
-if not exist logs mkdir logs
-
-REM Run with start /B to share console (closes when console closes) and redirect output
-start /B "RVC API" cmd /c "cd rvc && call rvc_venv\Scripts\activate && python -m rvc_python api -p 5050 -l --device cuda > ..\logs\rvc_api.log 2>&1"
-
-REM Give RVC a moment to spin up
-timeout /t 5 /nobreak >nul
 
 REM 4. Start ARIA Main Application
 echo [INIT] Starting ARIA Main Application...

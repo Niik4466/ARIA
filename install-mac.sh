@@ -7,6 +7,26 @@ set -e
 
 echo "[INSTALL] Starting Installation Sequence (macOS)..."
 
+INSTALL_RVC=0
+
+# Parse arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+    --rvc)
+        INSTALL_RVC=1
+        shift 1
+        ;;
+    --help)
+        echo "Usage: $0 [--rvc]"
+        echo "  --rvc    Install RVC backend alongside ARIA."
+        exit 1
+        ;;
+    *)
+        shift # Unknown option
+        ;;
+    esac
+done
+
 # ==============================================================================
 # PHASE 1: ARIA (Main System)
 # ==============================================================================
@@ -36,50 +56,42 @@ deactivate
 # ==============================================================================
 # PHASE 2: RVC (Subsystem)
 # ==============================================================================
-echo ""
-echo "[PHASE 2] Setting up RVC subsystem..."
-
-if [ ! -d "rvc" ]; then
-    echo "[ERROR] 'rvc' directory not found!"
-    exit 1
-fi
-
-cd rvc
-
-if [ ! -d "rvc_venv" ]; then
-    echo "[RVC] Creating venv 'rvc_venv' using Python 3.10..."
-    # Attempt to find python3.10 specifically, often installed via brew
-    if command -v python3.10 &> /dev/null; then
-        python3.10 -m venv rvc_venv
+if [ "$INSTALL_RVC" -eq 1 ]; then
+    echo ""
+    echo "[PHASE 2] Setting up RVC Subsystem..."
+    
+    # Activate existing aria environment
+    echo "[ARIA] Activating environment..."
+    source aria_venv/bin/activate
+    
+    echo "[RVC] Cloning official WebUI..."
+    if [ ! -d "src/rvc/rvc_webui" ]; then
+        git clone https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI src/rvc/rvc_webui
     else
-        echo "[WARNING] python3.10 not found. Configuring with default python3..."
-        python3 -m venv rvc_venv
+        echo "[RVC] 'src/rvc/rvc_webui' already exists. Skipping clone."
     fi
+    
+    echo "[CRITICAL] Downgrading pip for fairseq compatibility..."
+    pip install pip==23.3.1
+    
+    echo "[RVC] Installing RVC dependencies..."
+    pip install fairseq==0.12.2 faiss-cpu ffmpeg-python praat-parselmouth pyworld torchcrepe
+    
+    echo "[RVC] Upgrading pip back..."
+    pip install --upgrade pip
+    
+    echo "[RVC] Configuring PyTorch for macOS..."
+    pip install torch torchvision
+    
+    echo "[RVC] Downloading base models..."
+    python src/rvc/rvc_webui/tools/download_models.py
+    
+    echo "[ARIA] Deactivating..."
+    deactivate
 else
-    echo "[RVC] 'rvc_venv' already exists."
+    echo ""
+    echo "[INFO] Skipping RVC Installation (--rvc flag not provided)."
 fi
-
-echo "[RVC] Activating environment..."
-source rvc_venv/bin/activate
-
-echo "[CRITICAL] Downgrading pip to 23.0.1..."
-python3 -m pip install pip==23.0.1
-
-echo "[RVC] Installing rvc-python..."
-pip install rvc-python tensorboardX
-
-echo "[RVC] Configuring PyTorch for macOS..."
-# Default installation as requested for Mac (MPS support is included in standard builds usually, or CPU fallback)
-pip3 install torch torchvision
-
-# ==============================================================================
-# PHASE 3: HOTFIX
-# ==============================================================================
-echo ""
-echo "[PHASE 3] Applying RVC Code Hotfix..."
-python3 fix_rvc_code.py
 
 echo ""
 echo "[INSTALL] Installation Complete!"
-deactivate
-cd ..

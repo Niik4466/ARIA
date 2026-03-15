@@ -5,7 +5,6 @@ faster-whisper==1.0.3
 langgraph==0.2.49
 pydantic==2.9.2
 requests==2.32.3
-edge-tts
 soundfile==0.12.1
 pynput==1.7.6
 kokoro>=0.9.4
@@ -13,3 +12,12 @@ chromadb
 pypdf
 ollama
 ddgs
+
+
+transformers
+accelerate
+datasets
+pywhispercpp
+torchaudio
+scikit-learn
+qwen-tts

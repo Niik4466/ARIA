@@ -46,29 +46,7 @@ fi
 echo "[INFO] Pulling embedding model: nomic-embed-text"
 ollama pull nomic-embed-text
 
-# 3. Start RVC API in background
-echo "[INIT] Starting RVC API..."
-if [ ! -d "rvc/rvc_venv" ]; then
-    echo "[ERROR] 'rvc/rvc_venv' not found. Please run install-linux.sh first."
-    exit 1
-fi
 
-# Create logs directory
-if [ ! -d "logs" ]; then
-    mkdir -p logs
-fi
-
-# Using a subshell to switch context and run in background attached to this session
-(
-    cd rvc
-    source rvc_venv/bin/activate
-    echo "[RVC] Launching API on port 5050 (device: cuda)..."
-    # Run in background with & (bound to session), silent output
-    python -m rvc_python api -p 5050 -l --device cuda > ../logs/rvc_api.log 2>&1 &
-)
-
-# Initial wait for RVC
-sleep 5
 
 # 4. Start ARIA Main Application
 echo "[INIT] Starting ARIA Main Application..."
