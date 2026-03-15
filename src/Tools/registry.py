@@ -4,6 +4,7 @@ import re
 from .basic_tools import calculator_tool, get_current_time_tool
 from .os_tools import execute_system_command, read_file_tool, write_file_tool, get_os_info_tool, media_play_pause_tool
 from .search_tools import web_search_tool
+from .autoconfig import add_wakeword_samples_tool, new_wakeword_tool, change_voice_tool, regenerate_voice_tool
 
 TOOLS_REGISTRY = {
     "calculator": {
@@ -46,6 +47,26 @@ TOOLS_REGISTRY = {
         "description": "Busca información actualizada en internet. arg1:'query' (ej: arg1:'noticias de hoy' o arg1:'python tutorial')",
         "category": "search"
     },
+    "add_wakeword_samples": {
+        "function": add_wakeword_samples_tool,
+        "description": "Agrega muestras extras para mejorar el reconocimiento de la palabra de activación. arg1:'num_samples' (ej: arg1:'2')",
+        "category": "autoconfig"
+    },
+    "new_wakeword": {
+        "function": new_wakeword_tool,
+        "description": "Borra la wakeword actual y crea una nueva palabra de activación guiando al usuario. args: (sin argumentos)",
+        "category": "autoconfig"
+    },
+    "change_voice": {
+        "function": change_voice_tool,
+        "description": "Changes the assistant's voice based on a textual description. arg1:'text' (text to say), arg2:'instruct' (voice info e.g. 'Female, 24 years old'), arg3:'language' (e.g. 'English')",
+        "category": "autoconfig"
+    },
+    "regenerate_voice": {
+        "function": regenerate_voice_tool,
+        "description": "Regenerates the assistant's voice using previously stored metadata. args: (no arguments)",
+        "category": "autoconfig"
+    }
 }
 
 def get_tools_description(category: str = None) -> str:

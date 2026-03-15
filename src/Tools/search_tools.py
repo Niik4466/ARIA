@@ -1,6 +1,12 @@
 from ddgs import DDGS
 import time
 
+from config import verbose_mode
+_builtins_print = print
+def print(*args, **kwargs):
+    if verbose_mode:
+        _builtins_print(*args, **kwargs)
+
 def web_search_tool(query: str) -> str:
     """
     Realiza una búsqueda usando duckduckgo-search. 

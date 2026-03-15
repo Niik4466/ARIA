@@ -16,6 +16,12 @@ from pypdf import PdfReader
 import requests
 from config import RESPONSE_MODEL, API_URL, DOCUMENTS_PATH
 
+from config import verbose_mode
+_builtins_print = print
+def print(*args, **kwargs):
+    if verbose_mode:
+        _builtins_print(*args, **kwargs)
+
 RAG_DB_PATH = "./.chroma_db"
 DOCUMENTS_DIR = DOCUMENTS_PATH
 
@@ -26,6 +32,11 @@ class RAGManager:
             url=API_URL.replace("/api/generate", ""),
             model_name="nomic-embed-text"
         )
+        self.history_collection = self.client.get_or_create_collection(
+            name="conversation_history",
+            embedding_function=self.embedding_fn
+        )
+
         
     def _read_pdf(self, path: str) -> str:
         try:
@@ -226,6 +237,41 @@ class RAGManager:
             return context
         except Exception as e:
             return f"[RAG Error] No se pudo buscar en la categoría {category}: {e}"
+
+    def add_to_history(self, user_text: str, agent_response: str):
+        """Añade un extracto de conversación al historial RAG."""
+        text = f"user: {user_text}\n agent: {agent_response}"
+        import time
+        idx = str(int(time.time() * 1000))
+        try:
+            self.history_collection.add(
+                documents=[text],
+                ids=[f"hist_{idx}"]
+            )
+        except Exception as e:
+            print(f"[RAG] Error adding to history: {e}")
+
+    def query_history(self, query_text: str, n_results: int = 3) -> str:
+        """Busca en el historial de conversación los extractos más relevantes."""
+        try:
+            if self.history_collection.count() == 0:
+                return ""
+            
+            n = min(n_results, self.history_collection.count())
+            results = self.history_collection.query(
+                query_texts=[query_text],
+                n_results=n
+            )
+            
+            context = ""
+            if results and 'documents' in results and results['documents']:
+                for doc in results['documents'][0]:
+                    context += f"{doc}\n\n"
+            
+            return context.strip()
+        except Exception as e:
+            print(f"[RAG Error] Error querying history: {e}")
+            return ""
 
 # Instancia global
 rag_manager = RAGManager()
