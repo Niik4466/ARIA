@@ -12,9 +12,6 @@ __pycache__/
 *$py.class
 *.so
 
-# Python
-__init__.py
-
 # Distribution / packaging
 .Python
 build/
