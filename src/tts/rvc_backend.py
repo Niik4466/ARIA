@@ -1,14 +1,14 @@
 import numpy as np
 from typing import Optional
 
-try:
-    from config import RVC_MODEL
-except ImportError:
-    RVC_MODEL = "default"
+from ..utils import Config
+config = Config()
+
+RVC_MODEL = config.get("RVC_MODEL")
 
 from src.rvc.inference import RVC
 
-from config import verbose_mode
+verbose_mode = config.get("verbose_mode")
 _builtins_print = print
 def print(*args, **kwargs):
     if verbose_mode:

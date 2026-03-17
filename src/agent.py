@@ -2,10 +2,17 @@ import requests
 import re
 import json
 import time
-from config import API_URL, RESPONSE_MODEL, AGENT_EXTRA_PROMPT, USER_NAME
+from .utils import Config
+config = Config()
+
+API_URL = config.get("API_URL")
+RESPONSE_MODEL = config.get("RESPONSE_MODEL")
+AGENT_EXTRA_PROMPT = config.get("AGENT_EXTRA_PROMPT")
+USER_NAME = config.get("USER_NAME")
+verbose_mode = config.get("verbose_mode")
+
 from .Tools.registry import get_tools_description
 
-from config import verbose_mode
 _builtins_print = print
 def print(*args, **kwargs):
     if verbose_mode:

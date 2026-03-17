@@ -6,9 +6,14 @@ import soundfile as sf
 import warnings
 from transformers import AutoFeatureExtractor, WavLMModel
 from sklearn.metrics.pairwise import cosine_similarity
-from config import SAMPLE_RATE, WAKEWORD_SAMPLES, WAKEWORD_THRESHOLD
+from ..utils import Config
+config = Config()
 
-from config import verbose_mode
+SAMPLE_RATE = config.get("SAMPLE_RATE")
+WAKEWORD_SAMPLES = config.get("WAKEWORD_SAMPLES")
+WAKEWORD_THRESHOLD = config.get("WAKEWORD_THRESHOLD")
+verbose_mode = config.get("verbose_mode")
+
 _builtins_print = print
 def print(*args, **kwargs):
     if verbose_mode:

@@ -18,7 +18,12 @@ except ImportError:
         def __init__(self, *args, **kwargs): pass
         def __call__(self, *args, **kwargs): return []
 
-from config import KOKORO_LANG, KOKORO_VOICE, KOKORO_SPEED
+from ..utils import Config
+config = Config()
+
+KOKORO_LANG = config.get("KOKORO_LANG")
+KOKORO_VOICE = config.get("KOKORO_VOICE")
+KOKORO_SPEED = config.get("KOKORO_SPEED")
 
 from config import verbose_mode
 _builtins_print = print

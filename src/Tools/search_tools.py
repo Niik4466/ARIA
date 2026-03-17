@@ -1,7 +1,10 @@
 from ddgs import DDGS
 import time
 
-from config import verbose_mode
+from ..utils import Config
+config = Config()
+
+verbose_mode = config.get("verbose_mode")
 _builtins_print = print
 def print(*args, **kwargs):
     if verbose_mode:

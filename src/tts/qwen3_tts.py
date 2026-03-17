@@ -15,7 +15,10 @@ except ImportError:
     print("Warning: qwen_tts package not found. Using dummy AutoModel for structure check.")
     from transformers import AutoModel as Qwen3TTSModel
 
-from config import verbose_mode
+from ..utils import Config
+config = Config()
+
+verbose_mode = config.get("verbose_mode")
 
 try:
     from config import FLASH_ATTENTION

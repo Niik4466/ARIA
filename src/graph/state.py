@@ -13,11 +13,15 @@ import sys
 _root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _root_dir not in sys.path:
     sys.path.append(_root_dir)
-
-from config import USE_QWEN3_TTS, USE_RVC
+from ..utils import Config
 from src.vad.vad import VAD
 from src.vad.wakeword import WakeWord, WakeWordSetup
 from src.asr import ASR
+
+config = Config()
+
+USE_QWEN3_TTS = config.get("USE_QWEN3_TTS")
+USE_RVC = config.get("USE_RVC")
 
 if USE_QWEN3_TTS:
     from src.tts.qwen3_tts import Qwen3_TTS as Qwen3TTS

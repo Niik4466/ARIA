@@ -5,9 +5,14 @@ import queue
 import sys
 import time
 from collections import deque
-from config import SAMPLE_RATE, VAD_MIN_SILENCE_MS, VAD_SPEECH_PAD_MS
+from ..utils import Config
+config = Config()
 
-from config import verbose_mode
+SAMPLE_RATE = config.get("SAMPLE_RATE")
+VAD_MIN_SILENCE_MS = config.get("VAD_MIN_SILENCE_MS")
+VAD_SPEECH_PAD_MS = config.get("VAD_SPEECH_PAD_MS")
+verbose_mode = config.get("verbose_mode")
+
 _builtins_print = print
 def print(*args, **kwargs):
     if verbose_mode:

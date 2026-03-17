@@ -14,9 +14,14 @@ import chromadb
 from chromadb.utils import embedding_functions
 from pypdf import PdfReader
 import requests
-from config import RESPONSE_MODEL, API_URL, DOCUMENTS_PATH
+from .utils import Config
+config = Config()
 
-from config import verbose_mode
+RESPONSE_MODEL = config.get("RESPONSE_MODEL")
+API_URL = config.get("API_URL")
+DOCUMENTS_PATH = config.get("DOCUMENTS_PATH")
+verbose_mode = config.get("verbose_mode")
+
 _builtins_print = print
 def print(*args, **kwargs):
     if verbose_mode:

@@ -2,15 +2,16 @@ import time
 import numpy as np
 from faster_whisper import WhisperModel
 from .vad.vad import VADAudioStream
-from config import (
-    ASR_MODEL_ID, 
-    ASR_DEVICE, 
-    ASR_COMPUTE_TYPE, 
-    ASR_LANGUAGE, 
-    ASR_BEAM_SIZE
-)
+from .utils import Config
+config = Config()
 
-from config import verbose_mode
+ASR_MODEL_ID = config.get("ASR_MODEL_ID")
+ASR_DEVICE = config.get("ASR_DEVICE")
+ASR_COMPUTE_TYPE = config.get("ASR_COMPUTE_TYPE")
+ASR_LANGUAGE = config.get("ASR_LANGUAGE")
+ASR_BEAM_SIZE = config.get("ASR_BEAM_SIZE")
+verbose_mode = config.get("verbose_mode")
+
 _builtins_print = print
 def print(*args, **kwargs):
     if verbose_mode:

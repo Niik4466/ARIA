@@ -6,6 +6,7 @@ Purpose: Define the connections (edges) and final compilation of the LangGraph s
 
 from typing import Literal
 from langgraph.graph import StateGraph, END
+from ..utils import Config
 import sys
 import os
 
@@ -14,7 +15,10 @@ _root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _root_dir not in sys.path:
     sys.path.append(_root_dir)
 
-from config import USE_QWEN3_TTS, QWEN3_LANG
+config = Config()
+
+USE_QWEN3_TTS = config.get("USE_QWEN3_TTS")
+QWEN3_LANG = config.get("QWEN3_LANG")
 
 # Import State and backend variables from state.py
 from .state import (

@@ -1,0 +1,46 @@
+{
+    "VAD": {
+        "SAMPLE_RATE": 16000,
+        "CHANNELS": 1,
+        "VAD_MIN_SILENCE_MS": 500,
+        "VAD_SPEECH_PAD_MS": 300,
+        "VAD_AGGRESSIVENESS": 2
+    },
+    "WakeWord": {
+        "WAKEWORD_SAMPLES": 5,
+        "WAKEWORD_THRESHOLD": 0.9
+    },
+    "ASR": {
+        "ASR_MODEL_ID": "deepdml/faster-whisper-large-v3-turbo-ct2",
+        "ASR_LANGUAGE": "en",
+        "ASR_DEVICE": "cuda",
+        "ASR_COMPUTE_TYPE": "int8",
+        "ASR_BEAM_SIZE": 5
+    },
+    "Agent": {
+        "USER_NAME": "User",
+        "API_URL": "http://127.0.0.1:11434/api/generate",
+        "API_TYPE": "ollama",
+        "RESPONSE_MODEL": "qwen3.5:4b",
+        "DECISOR_MODEL": "qwen3.5:4b",
+        "AGENT_EXTRA_PROMPT": "You have a calm, neutral, and polite personality. You communicate clearly and respectfully.",
+    },
+    "TTS": {
+        "USE_QWEN3_TTS": true,
+        "QWEN3_LANG": "English",
+        "FLASH_ATTENTION": false,
+        "KOKORO_LANG": "a",
+        "KOKORO_VOICE": "af_heart",
+        "KOKORO_SPEED": 1.0
+    },
+    "RVC": {
+        "RVC_MODEL": "rvc_voice",
+        "USE_RVC": false
+    },
+    "RAG": {
+        "DOCUMENTS_PATH": "./documents"
+    },
+    "Debug": {
+        "verbose_mode": false
+    }
+}

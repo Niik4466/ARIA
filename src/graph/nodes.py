@@ -20,7 +20,15 @@ _root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _root_dir not in sys.path:
     sys.path.append(_root_dir)
 
-from config import DECISOR_MODEL, RESPONSE_MODEL, USE_QWEN3_TTS, USE_RVC, QWEN3_LANG
+from ..utils import Config
+
+config = Config()
+
+DECISOR_MODEL = config.get("DECISOR_MODEL")
+RESPONSE_MODEL = config.get("RESPONSE_MODEL")
+USE_QWEN3_TTS = config.get("USE_QWEN3_TTS")
+USE_RVC = config.get("USE_RVC")
+QWEN3_LANG = config.get("QWEN3_LANG")
 from src.vad.vad import VAD
 from src.vad.wakeword import WakeWord, WakeWordSetup
 from src.asr import ASR
