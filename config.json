@@ -23,7 +23,7 @@
         "API_TYPE": "ollama",
         "RESPONSE_MODEL": "qwen3.5:4b",
         "DECISOR_MODEL": "qwen3.5:4b",
-        "AGENT_EXTRA_PROMPT": "You have a calm, neutral, and polite personality. You communicate clearly and respectfully.",
+        "AGENT_EXTRA_PROMPT": "You have a calm, neutral, and polite personality. You communicate clearly and respectfully."
     },
     "TTS": {
         "USE_QWEN3_TTS": true,
