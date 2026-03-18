@@ -45,17 +45,8 @@ from src.agent import (
     get_farewell_prompt,
     get_waiting_prompt
 )
-from .state import (
-    GraphState,
-    RAG_CATEGORIES,
-    RAG_CATEGORIES_DESC_STR,
-    asr,
-    tts,
-    rvc,
-    audio_player
-)
+from .state import GraphState
 from src.Tools.registry import execute_tool
-from src.rag import rag_manager
 
 # --- Nodes ---
 
@@ -64,8 +55,9 @@ def asr_node(state: GraphState) -> GraphState:
     ASR NODE: Audio -> Text
     Converts audio to text and initializes history.
     """
-    audio = asr.listen()
-    text = asr.speech_to_text(audio) or ""
+    container = state["container"]
+    audio = container.asr.listen()
+    text = container.asr.speech_to_text(audio) or ""
     print(f"[🎤 ASR] {text}")
     return {**state, "user_text": text}
 
@@ -79,12 +71,13 @@ def rag_decisor_node(state: GraphState) -> GraphState:
     state["start_time"] = time.time()
     
     user_text = state["user_text"]
+    container = state["container"]
     
     # Skip if no categories
-    if not RAG_CATEGORIES:
+    if not container.rag_categories:
         return {**state, "rag_category": "none", "rag_context": ""}
 
-    system_prompt = get_rag_decisor_prompt(RAG_CATEGORIES_DESC_STR)
+    system_prompt = get_rag_decisor_prompt(container.rag_categories_desc_str)
 
     try:
         response = call_ollama(prompt=user_text, model=DECISOR_MODEL, system_prompt=system_prompt, think=False)
@@ -98,7 +91,7 @@ def rag_decisor_node(state: GraphState) -> GraphState:
     # Verify if category exists in our documents
     # Loose matching (lowercase)
     final_cat = "none"
-    for cat in RAG_CATEGORIES.keys():
+    for cat in container.rag_categories.keys():
         if cat.lower() == selected:
             final_cat = cat
             break
@@ -108,7 +101,7 @@ def rag_decisor_node(state: GraphState) -> GraphState:
     if final_cat != "none":
         # Consult RAG
         print(f"[📚 RAG] Searching in '{final_cat}'...")
-        rag_context = rag_manager.query_category(final_cat, user_text)
+        rag_context = container.rag_manager.query_category(final_cat, user_text)
         if rag_context:
             print("[📚 RAG] Context retrieved.")
         else:
@@ -172,6 +165,7 @@ def tool_node(state: GraphState) -> GraphState:
     """
     Generates tool JSON and executes it.
     """
+    container = state["container"]
     category = state["selected_category"]
     
     # --- Quick Waiting Response ---
@@ -184,12 +178,12 @@ def tool_node(state: GraphState) -> GraphState:
             print(f"[🤖 ARIA] {wait_text}")
         
             lang = QWEN3_LANG if USE_QWEN3_TTS else "Spanish"
-            wav, sr = tts.generate_speech(wait_text, languaje=lang)
+            wav, sr = container.tts.generate_speech(wait_text, languaje=lang)
         
             if wav is not None:
-                if rvc:
-                    wav, sr = rvc.transform_numpy(wav, sr)
-                audio_player.play_async(wav, sr)
+                if container.rvc:
+                    wav, sr = container.rvc.transform_numpy(wav, sr)
+                container.audio_player.play_async(wav, sr)
         except Exception as e:
             print(f"[System] ⚠️ Error in waiting response: {e}")
 
@@ -221,7 +215,7 @@ def tool_node(state: GraphState) -> GraphState:
             tool_args = {k: v for k, v in data.items() if k != "tool"}
             
             print(f"[🔨 Executing] {tool_name} {tool_args}")
-            res = execute_tool(tool_name, tool_args)
+            res = execute_tool(tool_name, tool_args, container)
             
             tool_result_str = f"Tool '{tool_name}' executed. Result: {res}"
         else:
@@ -247,13 +241,14 @@ def integrated_response_node(state: GraphState) -> GraphState:
     Fuses response generation and TTS into a single streaming pipeline.
     LLM (Stream) -> TTS (Sentence Stream) -> Audio Queue -> Playback Thread.
     """
+    container = state["container"]
     history = state.get("history_context", "")
     tools = state.get("tools_context", "")
     rag_context = state.get("rag_context", "")
     user_text = state["user_text"]
     
     print(f"[✨ Integrated] Retrieving conversation history from RAG...")
-    rag_history = rag_manager.query_history(user_text, n_results=3)
+    rag_history = container.rag_manager.query_history(user_text, n_results=3)
     
     print(f"[✨ Integrated] Generating streaming response and audio...")
 
@@ -278,7 +273,7 @@ def integrated_response_node(state: GraphState) -> GraphState:
                 ttfs_measured = True
 
             wav, sr = item
-            audio_player.play(wav, sr)
+            container.audio_player.play(wav, sr)
             audio_queue.task_done()
 
     pb_thread = threading.Thread(target=playback_worker, daemon=True)
@@ -302,10 +297,10 @@ def integrated_response_node(state: GraphState) -> GraphState:
     # 4. Generate audio from text stream and put in queue
     try:
         # We use the configured language or fallback to Spanish
-        for wav, sr in tts.generate_speech_stream(text_spy(text_stream), languaje=lang):
+        for wav, sr in container.tts.generate_speech_stream(text_spy(text_stream), languaje=lang):
             # Apply RVC if enabled
-            if rvc:
-                wav, sr = rvc.transform_numpy(wav, sr)
+            if container.rvc:
+                wav, sr = container.rvc.transform_numpy(wav, sr)
                 
             audio_queue.put((wav, sr))
             
@@ -321,6 +316,6 @@ def integrated_response_node(state: GraphState) -> GraphState:
     
     # Add history to RAG
     print(f"[✨ Integrated] Registering conversation in RAG history...")
-    rag_manager.add_to_history(user_text, full_reply)
+    container.rag_manager.add_to_history(user_text, full_reply)
     
     return {**state, "reply_text": full_reply}

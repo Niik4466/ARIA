@@ -21,13 +21,7 @@ USE_QWEN3_TTS = config.get("USE_QWEN3_TTS")
 QWEN3_LANG = config.get("QWEN3_LANG")
 
 # Import State and backend variables from state.py
-from .state import (
-    GraphState,
-    wake_word,
-    tts,
-    rvc,
-    audio_player
-)
+from .state import GraphState
 
 # Import Nodes from nodes.py
 from .nodes import (
@@ -89,7 +83,7 @@ def build_graph():
     return g.compile()
 
 
-def run_aria():
+def run_aria(container):
     """
     External loop: Wakeword -> Invoke Graph -> Wait for next wakeword.
     """
@@ -101,7 +95,7 @@ def run_aria():
     try:
         while True:
             # 1. Wait for wakeword
-            if not wake_word.listen_wakeword():
+            if not container.wake_word.listen_wakeword():
                 continue
             
             print("[System] 📢 Wakeword detected! Starting dialogue...")
@@ -117,12 +111,12 @@ def run_aria():
                 
                 # Generate and play audio
                 lang = QWEN3_LANG if USE_QWEN3_TTS else "Spanish"
-                wav, sr = tts.generate_speech(ack_text, languaje=lang)
+                wav, sr = container.tts.generate_speech(ack_text, languaje=lang)
                 
                 if wav is not None:
-                    if rvc:
-                        wav, sr = rvc.transform_numpy(wav, sr)
-                    audio_player.play(wav, sr)
+                    if container.rvc:
+                        wav, sr = container.rvc.transform_numpy(wav, sr)
+                    container.audio_player.play(wav, sr)
             except Exception as e:
                 print(f"[System] ⚠️ Error in acknowledgement: {e}")
             
@@ -137,7 +131,8 @@ def run_aria():
                 "next_node": "asr",
                 "selected_category": "none",
                 "reply_text": "",
-                "start_time": 0
+                "start_time": 0,
+                "container": container
             }
             
             # 3. Invoke graph once
@@ -156,12 +151,12 @@ def run_aria():
                     print(f"[🤖 ARIA] {farewell_text}")
                     
                     lang = QWEN3_LANG if USE_QWEN3_TTS else "Spanish"
-                    wav, sr = tts.generate_speech(farewell_text, languaje=lang)
+                    wav, sr = container.tts.generate_speech(farewell_text, languaje=lang)
                     
                     if wav is not None:
-                        if rvc:
-                            wav, sr = rvc.transform_numpy(wav, sr)
-                        audio_player.play(wav, sr)
+                        if container.rvc:
+                            wav, sr = container.rvc.transform_numpy(wav, sr)
+                        container.audio_player.play(wav, sr)
                 except Exception as e:
                     print(f"[System] ⚠️ Error in farewell: {e}")
                 

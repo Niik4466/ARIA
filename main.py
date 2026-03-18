@@ -7,11 +7,19 @@ def main():
     Initializes the processing graph and runs it continuously.
     """
     print("\n--- STARTING ARIA ASSISTANT ---")
+    
+    try:
+        from src.container import Container
+        container = Container()
+    except Exception as e:
+        print(f"\n[Main] ❌ Error initializing container: {e}")
+        sys.exit(1)
+        
     print("The system will enter standby mode waiting for the activation word.")
     print("Press Ctrl+C to exit.\n")
 
     try:
-        run_aria()
+        run_aria(container)
     except KeyboardInterrupt:
         print("\n[Main] 👋 Exiting assistant...")
         sys.exit(0)

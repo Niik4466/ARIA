@@ -100,7 +100,7 @@ def _parse_tool_input(tool_input: str) -> list:
     # Aún así mantenemos lógica robusta
     return [str(tool_input)]
 
-def execute_tool(tool_name: str, tool_args: dict) -> str:
+def execute_tool(tool_name: str, tool_args: dict, container=None) -> str:
     """
     Ejecuta una herramienta del registry.
     tool_args espera ser un dict con los argumentos, ej: {"arg1": "val1"}
@@ -111,6 +111,12 @@ def execute_tool(tool_name: str, tool_args: dict) -> str:
     tool_func = TOOLS_REGISTRY[tool_name]["function"]
     
     try:
+        category = TOOLS_REGISTRY[tool_name].get("category")
+        if category == "autoconfig":
+            # Pass container properly
+            tool_args["container"] = container
+            return tool_func(**tool_args)
+            
         # Extraer valores de los argumentos en orden
         args = list(tool_args.values())
         
