@@ -36,7 +36,15 @@ class Config:
     Loads and provides easy attribute-style access to the config.json variables, 
     accounting for categories.
     """
-    def __init__(self):
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(Config, cls).__new__(cls)
+            cls._instance._init_once()
+        return cls._instance
+
+    def _init_once(self):
         self._config = {}
         self._flat_map = {}
         self.reload()
