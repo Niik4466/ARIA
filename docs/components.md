@@ -40,3 +40,8 @@ Handles microphone input and environmental audio logic.
 A dynamically loaded registry of capabilities bridging the Assistant to the real world.
 - **`registry.py`**: The central master-list mapping JSON commands to Python functions.
 - Categories include OS functions (reading/writing files, parsing shell commands), Basic functions (Math, Date/Time), Web Search, and **Autoconfig** (Reconfiguring WakeWords natively).
+
+## 8. Backend Container (`src/container.py`)
+Acts as the central repository and Dependency Injection framework for all core functionalities.
+- Instead of maintaining chaotic global singletons scattered across `nodes.py`, `state.py`, or `main.py`, the `Container` class unifies the initialization of ASR, TTS, VAD, WakeWord, RVC, and RAG managers.
+- Once created, the instance is passed securely throughout the LangGraph steps (`GraphState`), guaranteeing safe resource handling, cleaner scope visibility, and far greater testing flexibility.

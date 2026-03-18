@@ -25,3 +25,14 @@ This `docs` folder contains multiple targeted files that completely demystify th
 
 - ⚡ **[Flash Attention](flash_attention.md)**
   Guide to configure and install Flash Attention for improved TTS inference times and memory usage (NVIDIA only).
+
+## Source Code Organization (`src/`)
+
+The `src` directory separates responsibilities strictly to allow massive modularity:
+- **`src/graph/`**: Contains the LangGraph implementation (`edges.py`, `nodes.py`, `state.py`) dictating the conversational flow.
+- **`src/Tools/`**: Hosts all functional sub-routines (OS, Math, API wrappers) executed dynamically when the agent determines it needs real-world data.
+- **`src/vad/`**: Contains the speech isolation mechanisms and the WakeWord similarity algorithms (`vad.py`, `wakeword.py`).
+- **`src/tts/`**: Groups text-to-speech mechanisms (`kokoro_tts.py`, `qwen3_tts.py`) and the `rvc_backend.py`.
+- **`src/container.py`**: The Dependency Injection engine loading and mapping models into a unified scope.
+- **`src/utils.py`**: Helper scripts, mainly the `Config` parsing logic.
+- **`src/agent.py` & `src/rag.py` & `src/asr.py`**: Standalone bridge scripts querying LLMs, VectorDBs, and Speech Recognizers.
