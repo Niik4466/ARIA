@@ -12,8 +12,6 @@ chromadb
 pypdf
 ollama
 ddgs
-
-
 transformers
 accelerate
 datasets
@@ -21,3 +19,5 @@ pywhispercpp
 torchaudio
 scikit-learn
 qwen-tts
+langchain-text-splitters
+sentence-transformers
