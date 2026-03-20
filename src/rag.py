@@ -1,23 +1,14 @@
-"""
-Módulo RAG (Retrieval-Augmented Generation).
-
-Propósito:
-- Escanear /documents/ para encontrar subdirectorios (categorías).
-- Cargar PDFs y archivos de texto.
-- Generar embeddings y almacenarlos en ChromaDB.
-- Proveer funciones de búsqueda por categoría.
-- Generar descripciones de categorías usando LLM.
-"""
-
 import os
+from collections import defaultdict
 import chromadb
 from chromadb.utils import embedding_functions
 from pypdf import PdfReader
 import requests
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from .utils import Config
+
 config = Config()
 
-RESPONSE_MODEL = config.get("RESPONSE_MODEL")
 API_URL = config.get("API_URL")
 DOCUMENTS_PATH = config.get("DOCUMENTS_PATH")
 verbose_mode = config.get("verbose_mode")
@@ -33,87 +24,77 @@ DOCUMENTS_DIR = DOCUMENTS_PATH
 class RAGManager:
     def __init__(self):
         self.client = chromadb.PersistentClient(path=RAG_DB_PATH)
-        self.embedding_fn = embedding_functions.OllamaEmbeddingFunction(
-            url=API_URL.replace("/api/generate", ""),
-            model_name="nomic-embed-text"
+        # Model instance
+        self.embedding_fn = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="all-MiniLM-L6-v2",
+            device="cpu"
         )
+        
+        # Collection for hierarchical RAG documents
+        self.docs_collection = self.client.get_or_create_collection(
+            name="hierarchical_rag_docs",
+            embedding_function=self.embedding_fn,
+            metadata={"hnsw:space": "cosine"}
+        )
+        
+        # Collection for conversation history
         self.history_collection = self.client.get_or_create_collection(
             name="conversation_history",
             embedding_function=self.embedding_fn
         )
 
-        
+
     def _read_pdf(self, path: str) -> str:
+        """Reads and extracts text from a PDF file."""
         try:
             reader = PdfReader(path)
             text = ""
             for page in reader.pages:
-                text += page.extract_text() + "\n"
+                extracted = page.extract_text()
+                if extracted:
+                    text += extracted + "\n"
             
-            # Limpieza del texto extraído
-            text = " ".join(text.split()) # Reemplaza múltiples espacios y saltos de línea con un solo espacio
-            text = text.strip() # Elimina espacios al inicio y final
+            # Clean extracted text
+            text = " ".join(text.split())
+            text = text.strip()
             return text
         except Exception as e:
-            print(f"[RAG] Error leyendo PDF {path}: {e}")
+            print(f"[RAG] Error reading PDF {path}: {e}")
             return ""
 
+
     def _read_text(self, path: str) -> str:
+        """Reads text from a standard text or markdown file."""
         try:
             with open(path, 'r', encoding='utf-8') as f:
                 return f.read()
         except Exception as e:
-            print(f"[RAG] Error leyendo texto {path}: {e}")
+            print(f"[RAG] Error reading text {path}: {e}")
             return ""
-            
-    def _generate_description(self, category: str, file_names: list) -> str:
-        """Genera una breve descripción de la categoría usando el LLM."""
-        prompt = (
-            f"Analiza la categoría '{category}' que contiene los siguientes archivos: {', '.join(file_names)}.\n"
-            "Genera una descripción MUY BREVE (máximo 15 palabras) de qué tipo de información contiene esta categoría.\n"
-            "Ejemplo: 'Documentación técnica sobre python y scripts.'\n"
-            "Descripción:"
-        )
-        
-        try:
-            payload = {
-                "model": RESPONSE_MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.3}
-            }
-            res = requests.post(API_URL, json=payload)
-            if res.status_code == 200:
-                desc = res.json().get("response", "").strip()
-                # Limpiar si el modelo es verboso
-                desc = desc.replace('"', '').replace("'", "")
-                return desc
-        except Exception as e:
-            print(f"[RAG] Error generando descripción: {e}")
-        
-        return f"Información sobre {category}."
 
-    def _should_update_file(self, file_path: str, filename: str, collection) -> bool:
-        """Verifica si un archivo necesita ser actualizado basándose en mtime."""
+
+    def _should_update_file(self, file_path: str, filename: str) -> bool:
+        """Checks if a file needs to be updated based on its modification time."""
         current_mtime = os.path.getmtime(file_path)
-        existing = collection.get(
+        existing = self.docs_collection.get(
             where={"source": filename},
             limit=1,
             include=["metadatas"]
         )
         
-        if existing['ids']:
+        if existing['ids'] and existing['metadatas']:
             stored_mtime = existing['metadatas'][0].get('last_modified', 0)
             if current_mtime == stored_mtime:
                 return False
             else:
-                print(f"[RAG] {filename} ha cambiado. Re-indexando...")
-                collection.delete(where={"source": filename})
+                print(f"[RAG] {filename} changed. Re-indexing...")
+                self.docs_collection.delete(where={"source": filename})
                 return True
         return True
 
-    def _update_file(self, file_path: str, filename: str, collection, current_mtime: float):
-        """Lee, fragmenta y almacena un archivo en la colección."""
+
+    def _update_file(self, file_path: str, filename: str, category: str, current_mtime: float):
+        """Reads, chunks, and stores a file in the documents collection."""
         content = ""
         if filename.lower().endswith(".pdf"):
             content = self._read_pdf(file_path)
@@ -123,12 +104,14 @@ class RAGManager:
         if not content:
             return
 
-        chunk_size = 1000 
-        overlap = 200
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=400,
+            chunk_overlap=50,
+            length_function=len,
+            is_separator_regex=False,
+        )
         
-        chunks = []
-        for i in range(0, len(content), chunk_size - overlap):
-            chunks.append(content[i:i + chunk_size])
+        chunks = text_splitter.split_text(content)
         
         chunks = [c for c in chunks if len(c) > 50]
 
@@ -136,7 +119,7 @@ class RAGManager:
             return
 
         ids = [f"{filename}_{i}" for i in range(len(chunks))]
-        print(f"[RAG] Vectorizando {filename} ({len(chunks)} chunks)...")
+        print(f"[RAG] Vectorizing {filename} ({len(chunks)} chunks)...")
         
         batch_size = 10
         for i in range(0, len(chunks), batch_size):
@@ -144,107 +127,175 @@ class RAGManager:
             batch_ids = ids[i:i+batch_size]
             batch_meta = [{
                 "source": filename, 
+                "category": category,
                 "last_modified": current_mtime
             } for _ in batch_chunks]
             
-            collection.add(
-                documents=batch_chunks,
-                metadatas=batch_meta,
-                ids=batch_ids
-            )
+            try:
+                self.docs_collection.add(
+                    documents=batch_chunks,
+                    metadatas=batch_meta,
+                    ids=batch_ids
+                )
+            except Exception as e:
+                print(f"[RAG] Error adding batch for {filename}: {e}")
 
-    def _process_category_files(self, cat_path: str, collection) -> tuple[list, bool]:
-        """Procesa todos los archivos de una categoría. Retorna lista de archivos y si hubo cambios."""
-        files_processed = []
-        category_changed = False
-        
-        for filename in os.listdir(cat_path):
-            file_path = os.path.join(cat_path, filename)
-            if not os.path.isfile(file_path): 
-                continue
-            
-            if self._should_update_file(file_path, filename, collection):
-                category_changed = True
-                self._update_file(file_path, filename, collection, os.path.getmtime(file_path))
-                
-            files_processed.append(filename)
-            
-        return files_processed, category_changed
-
-    def _handle_category_description(self, category: str, collection, files_processed: list, category_changed: bool) -> str:
-        """Gestiona la descripción de la categoría (generación o recuperación)."""
-        current_collection_meta = collection.metadata or {}
-        stored_description = current_collection_meta.get("description")
-        final_description = ""
-
-        if category_changed or not stored_description:
-            if files_processed:
-                print(f"[RAG] Generando nueva descripción para {category}...")
-                final_description = self._generate_description(category, files_processed)
-                collection.modify(metadata={"description": final_description})
-            else:
-                final_description = "Categoría vacía."
-        else:
-            final_description = stored_description
-            
-        return final_description
 
     def update(self) -> dict:
         """
-        Escanea DOCUMENTS_DIR, actualiza vectores SOLO si hay cambios y retorna metadata.
+        Scans DOCUMENTS_DIR, updates vectors ONLY if there are changes.
+        Removes vectors for files or categories that no longer exist in the directory.
+        Returns a dictionary of available categories mapping to generic descriptions.
         """
         if not os.path.exists(DOCUMENTS_DIR):
             os.makedirs(DOCUMENTS_DIR)
-            print(f"[RAG] Directorio {DOCUMENTS_DIR} creado.")
+            print(f"[RAG] Directory {DOCUMENTS_DIR} created.")
             return {}
 
         categories_metadata = {}
+        
+        # Track valid files to clean up deleted ones later
+        valid_files_on_disk = set()
         
         for category in os.listdir(DOCUMENTS_DIR):
             cat_path = os.path.join(DOCUMENTS_DIR, category)
             if not os.path.isdir(cat_path):
                 continue
                 
-            print(f"[RAG] Verificando categoría: {category}...")
+            print(f"[RAG] Checking category: {category}...")
             
-            try:
-                collection = self.client.get_or_create_collection(
-                    name=category,
-                    embedding_function=self.embedding_fn
-                )
-            except Exception as e:
-                print(f"[RAG] Error accediendo a colección {category}: {e}")
-                continue
+            for filename in os.listdir(cat_path):
+                file_path = os.path.join(cat_path, filename)
+                if not os.path.isfile(file_path): 
+                    continue
+                
+                valid_files_on_disk.add((category, filename))
+                
+                if self._should_update_file(file_path, filename):
+                    self._update_file(file_path, filename, category, os.path.getmtime(file_path))
+                    
+            # Provide generic description instead of using LLM
+            categories_metadata[category] = f"Information about {category}."
+            
+        # Clean up deleted files from ChromaDB
+        existing_docs = self.docs_collection.get(include=["metadatas"])
+        if existing_docs and existing_docs.get("metadatas"):
+            sources_to_delete = set()
+            for meta in existing_docs["metadatas"]:
+                if not meta:
+                    continue
+                db_category = meta.get("category")
+                db_source = meta.get("source")
+                if (db_category, db_source) not in valid_files_on_disk:
+                    sources_to_delete.add(db_source)
+                    
+            for source in sources_to_delete:
+                print(f"[RAG] Removed missing file or category from index: {source}")
+                self.docs_collection.delete(where={"source": source})
 
-            files_processed, category_changed = self._process_category_files(cat_path, collection)
-            description = self._handle_category_description(category, collection, files_processed, category_changed)
-            categories_metadata[category] = description
-            
-        print("[RAG] Sincronización completa.")
+        print("[RAG] Sync complete.")
         return categories_metadata
 
-    def query_category(self, category: str, query_text: str, n_results: int = 3) -> str:
-        """Busca en una categoría específica."""
+
+    def retrieve_global(self, query: str, k: int = 20) -> list:
+        """
+        Hierarchical Level 1: Global Retrieval (Router).
+        Retrieves the top-k documents globally across all categories.
+        """
         try:
-            collection = self.client.get_collection(name=category, embedding_function=self.embedding_fn)
-            results = collection.query(
+            results = self.docs_collection.query(
+                query_texts=[query],
+                n_results=k,
+                include=["documents", "metadatas", "distances"]
+            )
+        except Exception as e:
+            print(f"[RAG] Global retrieval error: {e}")
+            return []
+            
+        retrieved_docs = []
+        if results.get('documents') and len(results['documents']) > 0 and len(results['documents'][0]) > 0:
+            docs = results['documents'][0]
+            metas = results['metadatas'][0]
+            distances = results['distances'][0]
+            
+            for doc, meta, dist in zip(docs, metas, distances):
+                # Cosine space distance: similarity = 1 - distance
+                similarity = 1.0 - dist
+                category = meta.get("category", "unknown")
+                source = meta.get("source", "unknown")
+                retrieved_docs.append({
+                    "text": doc,
+                    "category": category,
+                    "source": source,
+                    "similarity": similarity
+                })
+        return retrieved_docs
+
+
+    def weighted_category_vote(self, retrieved_docs: list) -> str:
+        """
+        Similarity-weighted voting to determine the most relevant category.
+        """
+        category_scores = defaultdict(float)
+        for doc in retrieved_docs:
+            category_scores[doc["category"]] += doc["similarity"]
+        
+        if not category_scores:
+            return "none"
+            
+        best_category = max(category_scores.items(), key=lambda x: x[1])[0]
+        return best_category
+
+
+    def query_category(self, category: str, query_text: str, n_results: int = 8) -> str:
+        """
+        Hierarchical Level 2: Restricted search within a specific category.
+        Used internally by query_documents, but exposed if direct search is needed.
+        """
+        try:
+            results = self.docs_collection.query(
                 query_texts=[query_text],
-                n_results=n_results
+                n_results=n_results,
+                where={"category": category},
+                include=["documents", "metadatas"]
             )
             
-            # Formatear contexto
             context = ""
-            for i, doc_list in enumerate(results['documents']):
-                for j, doc in enumerate(doc_list):
-                    source = results['metadatas'][i][j].get('source', 'unknown')
-                    context += f"--- Fragmento de {source} ---\n{doc}\n\n"
+            if results.get('documents') and len(results['documents']) > 0 and len(results['documents'][0]) > 0:
+                for i, doc in enumerate(results['documents'][0]):
+                    source = results['metadatas'][0][i].get('source', 'unknown')
+                    context += f"--- Excerpt from {source} ---\n{doc}\n\n"
             
-            return context
+            return context.strip()
         except Exception as e:
-            return f"[RAG Error] No se pudo buscar en la categoría {category}: {e}"
+            return f"[RAG Error] Could not search in category {category}: {e}"
+
+
+    def query_documents(self, query: str) -> str:
+        """
+        Executes the full two-level hierarchical RAG retrieval.
+        Returns the formatted context retrieved from the best category.
+        """
+        print(f"[📚 RAG] Performing hierarchical search for query...")
+        
+        # Level 1: Global retrieval & vote
+        global_docs = self.retrieve_global(query, k=20)
+        if not global_docs:
+            print("[📚 RAG] No documents retrieved.")
+            return ""
+            
+        best_category = self.weighted_category_vote(global_docs)
+        print(f"[📚 RAG] Selected Category via voting: '{best_category}'")
+        
+        if best_category == "none":
+            return ""
+            
+        # Level 2: Category retrieval
+        return self.query_category(best_category, query, n_results=8)
+
 
     def add_to_history(self, user_text: str, agent_response: str):
-        """Añade un extracto de conversación al historial RAG."""
+        """Adds a conversation excerpt to the RAG history collection."""
         text = f"user: {user_text}\n agent: {agent_response}"
         import time
         idx = str(int(time.time() * 1000))
@@ -256,8 +307,9 @@ class RAGManager:
         except Exception as e:
             print(f"[RAG] Error adding to history: {e}")
 
+
     def query_history(self, query_text: str, n_results: int = 3) -> str:
-        """Busca en el historial de conversación los extractos más relevantes."""
+        """Searches the conversation history for the most relevant excerpts."""
         try:
             if self.history_collection.count() == 0:
                 return ""
@@ -277,6 +329,3 @@ class RAGManager:
         except Exception as e:
             print(f"[RAG Error] Error querying history: {e}")
             return ""
-
-# Instancia global
-rag_manager = RAGManager()
