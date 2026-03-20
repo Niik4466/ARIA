@@ -17,7 +17,7 @@ from src.utils import Config
 from src.vad.vad import VAD
 from src.vad.wakeword import WakeWord, WakeWordSetup
 from src.asr import ASR
-from src.rag import rag_manager
+from src.rag import RAGManager
 from src.audio_io import player
 
 class Container:
@@ -70,7 +70,7 @@ class Container:
         
         # RAG Initialization
         print("🔄 Initializing RAG system...")
-        self.rag_manager = rag_manager
+        self.rag_manager = RAGManager()
         self.rag_categories = self.rag_manager.update()
         
         # Construct descriptions string
