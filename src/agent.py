@@ -19,11 +19,10 @@ def print(*args, **kwargs):
         _builtins_print(*args, **kwargs)
 
 
-# 1. PROMPT PARA EL NODO DECISOR DE HERRAMIENTAS
+# 1. PROMPT FOR TOOL DECISOR NODE
 TOOL_DECISOR_SYSTEM_PROMPT = (
     "You are the central brain of an assistant. Your sole function is to decide what type of expert "
     "should handle the user's request, based on the conversation history and the information found (RAG).\n\n"
-    "{formatted_rag_context}"
     "{formatted_tools_context}"
     "AVAILABLE CATEGORIES:\n"
     "- 'search': To look for current information on the internet, news, weather.\n"
@@ -39,18 +38,19 @@ TOOL_DECISOR_SYSTEM_PROMPT = (
 )
 
 
-# 1.5 PROMPT PARA EL NODO DECISOR DE RAG
+# 1.5 PROMPT FOR RAG DECISOR NODE
 RAG_DECISOR_SYSTEM_PROMPT = (
-    "Your function is to determine if the user's query requires information from internal documents stored in the RAG.\n\n"
-    "AVAILABLE RAG CATEGORIES:\n"
-    "```{rag_categories_desc}```\n\n"
-    "If the query CLEARLY relates to any of these categories, respond with the category NAME.\n"
-    "If it does not relate or is general chat, respond 'none'.\n"
-    "Respond ONLY with one word: the category name or 'none'."
+    "You are an evaluator. Your only job is to determine if the provided RAG context is sufficient "
+    "to answer the user's query. YOU MUST NOT PROVIDE EXPLANATIONS OR REASONS.\n\n"
+    "RAG CONTEXT:\n"
+    "```\n{rag_context}\n```\n\n"
+    "If the context contains enough relevant information to fully or partially answer the user's request, respond 'yes'.\n"
+    "If the context is irrelevant, empty, or does not help to answer the user, respond 'no'.\n"
+    "CRITICAL RULE: Respond EXCLUSIVELY with the single word 'yes' or 'no'. Any other text is strictly forbidden."
 )
 
 
-# 2. PROMPT PARA GENERACIÓN DE TOOLS (Template)
+# 2. PROMPT FOR TOOL GENERATION (Template)
 TOOL_GENERATION_PROMPT_TEMPLATE = (
     "You are an expert agent in using tools of type: {category}.\n"
     "Your goal is to generate the JSON to invoke the precise tool that resolves the request.\n\n"
@@ -67,7 +67,7 @@ TOOL_GENERATION_PROMPT_TEMPLATE = (
 )
 
 
-# 3. PROMPT PARA RESPUESTA FINAL
+# 3. PROMPT FOR FINAL RESPONSE
 FINAL_RESPONSE_SYSTEM_PROMPT = (
     "Your task is to generate the final response for the user.\n"
     f"The user's name is: {USER_NAME}\n"
@@ -91,7 +91,7 @@ FINAL_RESPONSE_SYSTEM_PROMPT = (
 )
 
 
-# 4. PROMPT PARA ACKNOWLEDGEMENT (ACUSE DE RECIBO)
+# 4. PROMPT FOR ACKNOWLEDGEMENT
 ACKNOWLEDGEMENT_SYSTEM_PROMPT = (
     "You are a voice assistant. You have just been activated by your wake word.\n"
     "Generate an extremely short acknowledgement phrase (1 or 2 words) in singular to indicate that you are listening.\n"
@@ -109,7 +109,7 @@ ACKNOWLEDGEMENT_SYSTEM_PROMPT = (
 )
 
 
-# 4.5 PROMPT PARA WAITING (ESPERA)
+# 4.5 PROMPT FOR WAITING
 WAITING_SYSTEM_PROMPT = (
     "You are a voice assistant. The user has requested a task that requires some processing time.\n"
     "Generate an extremely short waiting phrase (maximum 4 words) to indicate that you are on it.\n"
@@ -125,7 +125,7 @@ WAITING_SYSTEM_PROMPT = (
 )
 
 
-# 5. PROMPT PARA FAREWELL (DESPEDIDA)
+# 5. PROMPT FOR FAREWELL
 FAREWELL_SYSTEM_PROMPT = (
     "You are a voice assistant. The user has requested to close the program or is saying goodbye.\n"
     "Generate a very short farewell phrase (maximum 3 words).\n"
@@ -144,7 +144,7 @@ FAREWELL_SYSTEM_PROMPT = (
 )
 
 
-# 6. PROMPT PARA WAKEWORD CONFIG
+# 6. PROMPT FOR WAKEWORD CONFIG
 WAKEWORD_CONFIG_SYSTEM_PROMPT = (
     "You are a voice assistant guiding the user to configure your wake word.\n"
     "Generate a very short phrase EXACTLY according to the user's instruction.\n"
@@ -159,17 +159,15 @@ WAKEWORD_CONFIG_SYSTEM_PROMPT = (
 
 
 
-def get_tool_decisor_prompt(tools_context: str = "", rag_context: str = "", history_context: str = "") -> str:
-    formatted_rag = f"FOUND INFORMATION:\n```\n{rag_context}\n```\n\n" if rag_context else ""
+def get_tool_decisor_prompt(tools_context: str = "") -> str:
     formatted_tools = f"TOOL CONTEXT:\n```\n{tools_context}\n```\n\n" if tools_context else ""
     return TOOL_DECISOR_SYSTEM_PROMPT.format(
-        formatted_rag_context=formatted_rag, 
         formatted_tools_context=formatted_tools
     )
 
 
-def get_rag_decisor_prompt(rag_categories_desc: str) -> str:
-    return RAG_DECISOR_SYSTEM_PROMPT.format(rag_categories_desc=rag_categories_desc)
+def get_rag_decisor_prompt(rag_context: str) -> str:
+    return RAG_DECISOR_SYSTEM_PROMPT.format(rag_context=rag_context)
 
 
 def get_tool_agent_prompt(category: str, rag_context: str = "", history_context: str = "") -> str:
@@ -206,13 +204,13 @@ def get_wakeword_prompt(language: str = "English", history: str = "") -> str:
 
 
 def clean_emojis(text: str) -> str:
-    """Elimina emojis del texto."""
+    """Removes emojis from the text."""
     cleaned_text = re.sub(r'[*\$]', '', text)
     return re.sub(r'[\U0001f600-\U0001f64f\U0001f300-\U0001f5ff\U0001f680-\U0001f6ff]', '', cleaned_text)
 
 
 def clean_think_tags(text: str) -> str:
-    """Elimina tags <think>."""
+    """Removes <think> tags."""
     if not text: return ""
     cleaned = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL | re.IGNORECASE)
     cleaned = re.sub(r"</?think\s*/?>", "", cleaned, flags=re.IGNORECASE)
@@ -256,7 +254,7 @@ def call_ollama(prompt: str, model: str = RESPONSE_MODEL, system_prompt: str = N
 
 def call_ollama_stream(prompt: str, model: str = RESPONSE_MODEL, system_prompt: str = None, json_mode: bool = False, temperature: float = 0.3, think: bool = False):
     """
-    Realiza una llamada a la API de Ollama pidiendo un flujo (stream) y lo retorna.
+    Makes a call to the Ollama API requesting a stream and yields it.
     """
     full_prompt = f"{system_prompt}\n\nUser/Context: {prompt}\nAssistant:" if system_prompt else prompt
     
@@ -290,6 +288,6 @@ if __name__ == "__main__":
             print(chunk, end="", flush=True)
         print("\n--- End of test ---")
     except Exception as e:
-        print(f"\nError en la prueba: {e}")
+        print(f"\nError in test: {e}")
 
 

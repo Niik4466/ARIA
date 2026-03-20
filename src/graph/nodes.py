@@ -64,54 +64,38 @@ def asr_node(state: GraphState) -> GraphState:
 
 def rag_decisor_node(state: GraphState) -> GraphState:
     """
-    RAG DECISOR NODE: Defines if RAG is used and which category.
-    Runs BEFORE Tool Decisor to provide context.
+    RAG DECISOR NODE: Searches the RAG and decides if the context 
+    is sufficient to answer the user.
     """
-    # Start timing for TTFS metric
     state["start_time"] = time.time()
-    
     user_text = state["user_text"]
     container = state["container"]
     
-    # Skip if no categories
-    if not container.rag_categories:
-        return {**state, "rag_category": "none", "rag_context": ""}
+    print(f"[📚 RAG] Querying Information for: '{user_text}'...")
+    rag_context = container.rag_manager.query_documents(user_text)
+    
+    if not rag_context or not rag_context.strip():
+        print("[📚 RAG Decisor] No relevant context found. Proceeding to tools.")
+        return {**state, "rag_context": "", "next_node": "tool_decisor"}
 
-    system_prompt = get_rag_decisor_prompt(container.rag_categories_desc_str)
+    print("[📚 RAG Decisor] Context retrieved. Evaluating relevance...")
+    system_prompt = get_rag_decisor_prompt(rag_context)
 
     try:
         response = call_ollama(prompt=user_text, model=DECISOR_MODEL, system_prompt=system_prompt, think=False)
-        # Clean response to get only the category
-        selected = response.strip().replace("'", "").replace('"', '').replace(".", "").lower()
+        decision = response.strip().lower().replace("'", "").replace('"', '').replace(".", "")
     except Exception as e:
         print(f"Error in RAG Decisor: {e}")
-        selected = "none"
+        decision = "no"
 
-    rag_context = ""
-    # Verify if category exists in our documents
-    # Loose matching (lowercase)
-    final_cat = "none"
-    for cat in container.rag_categories.keys():
-        if cat.lower() == selected:
-            final_cat = cat
-            break
+    print(f"[📚 RAG Decisor] Decision: {decision}")
 
-    print(f"[📚 RAG Decisor] Selected: {final_cat}")
-
-    if final_cat != "none":
-        # Consult RAG
-        print(f"[📚 RAG] Searching in '{final_cat}'...")
-        rag_context = container.rag_manager.query_category(final_cat, user_text)
-        if rag_context:
-            print("[📚 RAG] Context retrieved.")
-        else:
-            print("[📚 RAG] No relevant information found.")
-            
-    return {
-        **state,
-        "rag_category": final_cat,
-        "rag_context": rag_context
-    }
+    if "yes" in decision:
+        print("[🧠 RAG Decisor] Context is sufficient. Routing to response.")
+        return {**state, "rag_context": rag_context, "next_node": "generate_response"}
+    else:
+        print("[🧠 RAG Decisor] Context insufficient. Proceeding to tools.")
+        return {**state, "next_node": "tool_decisor"}
 
 
 def tool_decisor_node(state: GraphState) -> GraphState:
@@ -121,7 +105,7 @@ def tool_decisor_node(state: GraphState) -> GraphState:
     # Security: If max iterations reached, force response
     if state.get("iteration_count", 0) >= 5:
         print("[⚠️ Decisor] Max iterations reached. Forcing response.")
-        return {**state, "next_node": "response"}
+        return {**state, "next_node": "generate_response"}
 
     user_text = state["user_text"]
     rag_context = state.get("rag_context", "")
@@ -132,8 +116,6 @@ def tool_decisor_node(state: GraphState) -> GraphState:
     # Inject RAG context into decisor prompt
     system_prompt = get_tool_decisor_prompt(
         tools_context=state.get("tools_context", ""),
-        rag_context=rag_context, 
-        history_context=state.get("history_context", "")
     )
     
     # Call Ollama
@@ -152,7 +134,7 @@ def tool_decisor_node(state: GraphState) -> GraphState:
     if found_category == "exit":
         next_node = "end"
     else:
-        next_node = "tool_node" if found_category != "response" else "response"
+        next_node = "tool_node" if found_category != "response" else "generate_response"
     
     return {
         **state,
@@ -236,10 +218,11 @@ def tool_node(state: GraphState) -> GraphState:
     }
 
 
-def integrated_response_node(state: GraphState) -> GraphState:
+def generate_response_node(state: GraphState) -> GraphState:
     """
-    Fuses response generation and TTS into a single streaming pipeline.
-    LLM (Stream) -> TTS (Sentence Stream) -> Audio Queue -> Playback Thread.
+    GENERATE RESPONSE NODE:
+    Generates the text response via LLM streaming.
+    Passes the stream to the TTS node.
     """
     container = state["container"]
     history = state.get("history_context", "")
@@ -247,10 +230,38 @@ def integrated_response_node(state: GraphState) -> GraphState:
     rag_context = state.get("rag_context", "")
     user_text = state["user_text"]
     
-    print(f"[✨ Integrated] Retrieving conversation history from RAG...")
+    print(f"[✨ Generate] Retrieving conversation history from RAG...")
     rag_history = container.rag_manager.query_history(user_text, n_results=3)
     
-    print(f"[✨ Integrated] Generating streaming response and audio...")
+    print(f"[✨ Generate] Generating streaming response...")
+
+    # Text stream from Ollama
+    lang = QWEN3_LANG if USE_QWEN3_TTS else "English"
+    text_stream = call_ollama_stream(
+        prompt=user_text, 
+        model=RESPONSE_MODEL,
+        system_prompt=get_final_response_prompt(tools_context=tools, history_context=rag_history, rag_context=rag_context, language=lang)
+    )
+    
+    return {**state, "text_stream": text_stream}
+
+
+def tts_response_node(state: GraphState) -> GraphState:
+    """
+    TTS RESPONSE NODE:
+    Consumes the text stream, generating audio chunks and playing them.
+    Saves the final text to the RAG history context.
+    """
+    container = state["container"]
+    text_stream = state.get("text_stream")
+    user_text = state.get("user_text", "")
+    lang = QWEN3_LANG if USE_QWEN3_TTS else "English"
+    
+    if not text_stream:
+        print("[System] ⚠️ Error: No text stream provided to TTS node.")
+        return state
+        
+    print(f"[🔊 TTS] Generating audio from stream...")
 
     # 1. Setup Audio Queue and Playback Worker
     audio_queue = queue.Queue()
@@ -279,22 +290,14 @@ def integrated_response_node(state: GraphState) -> GraphState:
     pb_thread = threading.Thread(target=playback_worker, daemon=True)
     pb_thread.start()
 
-    # 2. Text stream from Ollama
-    lang = QWEN3_LANG if USE_QWEN3_TTS else "English"
-    text_stream = call_ollama_stream(
-        prompt=user_text, 
-        model=RESPONSE_MODEL,
-        system_prompt=get_final_response_prompt(tools_context=tools, history_context=rag_history, rag_context=rag_context, language=lang)
-    )
-    
-    # 3. Wrap stream to capture full text for state
+    # 2. Wrap stream to capture full text for state
     full_text_list = []
     def text_spy(stream):
         for chunk in stream:
             full_text_list.append(chunk)
             yield chunk
 
-    # 4. Generate audio from text stream and put in queue
+    # 3. Generate audio from text stream and put in queue
     try:
         # We use the configured language or fallback to Spanish
         for wav, sr in container.tts.generate_speech_stream(text_spy(text_stream), languaje=lang):
@@ -305,9 +308,9 @@ def integrated_response_node(state: GraphState) -> GraphState:
             audio_queue.put((wav, sr))
             
     except Exception as e:
-        print(f"[Integrated Node] ❌ Error in stream processing: {e}")
+        print(f"[TTS Node] ❌ Error in stream processing: {e}")
 
-    # 5. Cleanup: Signal worker to stop and wait
+    # 4. Cleanup: Signal worker to stop and wait
     audio_queue.put(None)
     audio_queue.join()
     pb_thread.join()

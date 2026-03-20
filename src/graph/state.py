@@ -4,7 +4,7 @@ Processing Graph State Module.
 Purpose: Define the GraphState type definition.
 """
 
-from typing import TypedDict
+from typing import TypedDict, Any
 import os
 import sys
 
@@ -30,8 +30,11 @@ class GraphState(TypedDict, total=False):
     rag_context: str           # Retrieved text
 
     # Flow control
-    next_node: str             # 'tool_node', 'response_node' or 'end'
+    next_node: str             # 'tool_node', 'generate_response' or 'end'
     selected_category: str     # 'search', 'os', 'basic', etc.
+    
+    # Stream capability
+    text_stream: Any           # Generator for LLM's text output
     
     # Final response
     reply_text: str
