@@ -42,6 +42,13 @@ class RAGManager:
             name="conversation_history",
             embedding_function=self.embedding_fn
         )
+        
+        # Collection for MCP tools
+        self.tools_collection = self.client.get_or_create_collection(
+            name="mcp_tools",
+            embedding_function=self.embedding_fn,
+            metadata={"hnsw:space": "cosine"}
+        )
 
 
     def _read_pdf(self, path: str) -> str:
@@ -329,3 +336,47 @@ class RAGManager:
         except Exception as e:
             print(f"[RAG Error] Error querying history: {e}")
             return ""
+
+    def write_tools(self, tools: list) -> None:
+        """Stores or updates MCP tool descriptions in the tools collection."""
+        if not tools:
+            return
+            
+        ids = [t["id"] for t in tools]
+        documents = [t["text"] for t in tools]
+        metadatas = [t.get("metadata", {}) for t in tools]
+        
+        try:
+            self.tools_collection.upsert(
+                ids=ids,
+                documents=documents,
+                metadatas=metadatas
+            )
+        except Exception as e:
+            print(f"[RAG Error] Error writing tools: {e}")
+
+    def get_tools(self, query: str, k: int = 3) -> list:
+        """Retrieves semantically similar tools from the tools collection."""
+        try:
+            if self.tools_collection.count() == 0:
+                return []
+                
+            n = min(k, self.tools_collection.count())
+            results = self.tools_collection.query(
+                query_texts=[query],
+                n_results=n,
+                include=["documents", "metadatas"]
+            )
+            
+            retrieved_tools = []
+            if results.get('ids') and len(results['ids']) > 0 and len(results['ids'][0]) > 0:
+                for tool_id, doc, meta in zip(results['ids'][0], results['documents'][0], results['metadatas'][0]):
+                    retrieved_tools.append({
+                        "id": tool_id,
+                        "text": doc,
+                        "metadata": meta
+                    })
+            return retrieved_tools
+        except Exception as e:
+            print(f"[RAG Error] Error querying tools: {e}")
+            return []
