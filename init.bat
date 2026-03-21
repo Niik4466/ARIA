@@ -32,10 +32,6 @@ if not "%RESPONSE_MODEL%"=="%DECISOR_MODEL%" (
     call ollama pull %DECISOR_MODEL%
 )
 
-echo [INFO] Pulling embedding model: nomic-embed-text
-call ollama pull nomic-embed-text
-
-
 
 REM 4. Start ARIA Main Application
 echo [INIT] Starting ARIA Main Application...

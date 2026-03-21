@@ -43,10 +43,6 @@ if [ "$RESPONSE_MODEL" != "$DECISOR_MODEL" ]; then
     ollama pull "$DECISOR_MODEL"
 fi
 
-echo "[INFO] Pulling embedding model: nomic-embed-text"
-ollama pull nomic-embed-text
-
-
 
 # 4. Start ARIA Main Application
 echo "[INIT] Starting ARIA Main Application..."
