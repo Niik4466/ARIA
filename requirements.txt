@@ -21,3 +21,4 @@ scikit-learn
 qwen-tts
 langchain-text-splitters
 sentence-transformers
+mcp
