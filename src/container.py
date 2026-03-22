@@ -19,6 +19,7 @@ from src.vad.wakeword import WakeWord, WakeWordSetup
 from src.asr import ASR
 from src.rag import RAGManager
 from src.audio_io import player
+from src.mcp.mcp_manager import MCPManager
 
 class Container:
     """
@@ -77,4 +78,10 @@ class Container:
         desc_list = [f"- '{k}': {v}" for k, v in self.rag_categories.items()]
         self.rag_categories_desc_str = "\n".join(desc_list) if desc_list else "(No documents available)"
         print("✅ RAG Initialized.")
+
+        # MCP Initialization
+        print("🔄 Initializing MCP system...")
+        self.mcp_manager = MCPManager(self.rag_manager)
+        print("✅ MCP Initialized.")
+
         print("--- BACKEND CONTAINER READY ---\n")
