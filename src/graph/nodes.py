@@ -46,7 +46,6 @@ from src.agent import (
     get_waiting_prompt
 )
 from .state import GraphState
-from src.Tools.registry import execute_tool
 
 # --- Nodes ---
 
@@ -127,14 +126,13 @@ def tool_decisor_node(state: GraphState) -> GraphState:
         print(f"Error in Tool Decisor: {e}")
         category = "response"
 
-    valid_categories = ['search', 'os', 'basic', 'autoconfig', 'exit']
-    # Check if any valid category is in the response
+    valid_categories = ['tool', 'response', 'exit']
     found_category = next((c for c in valid_categories if c in category), "response")
     
     if found_category == "exit":
         next_node = "end"
     else:
-        next_node = "tool_node" if found_category != "response" else "generate_response"
+        next_node = "tool_node" if found_category == "tool" else "generate_response"
     
     return {
         **state,
@@ -145,13 +143,12 @@ def tool_decisor_node(state: GraphState) -> GraphState:
 
 def tool_node(state: GraphState) -> GraphState:
     """
-    Generates tool JSON and executes it.
+    Generates tool JSON and executes it dynamically using MCP tools.
     """
     container = state["container"]
-    category = state["selected_category"]
     
     # --- Quick Waiting Response ---
-    if state.get("tools_context", "") == "" and category != "autoconfig":
+    if state.get("tools_context", "") == "":
         try:
             wait_prompt = get_waiting_prompt(language=QWEN3_LANG)
             wait_text = call_ollama(prompt="Generate waiting phrase", system_prompt=wait_prompt, temperature=0.7)
@@ -172,10 +169,17 @@ def tool_node(state: GraphState) -> GraphState:
     history = state.get("history_context", "")
     user_text = state["user_text"]
     rag_context = state.get("rag_context", "")
-
-    system_prompt = get_tool_agent_prompt(category=category, rag_context=rag_context, history_context=history)
     
-    print(f"[🔧 ToolGen] Generating JSON for {category}...")
+    # Fetch top 3 tools directly from MCP
+    mcp_tools = container.mcp_manager.get_tools(user_text, k=3)
+    if not mcp_tools:
+        tools_desc = "No tools available."
+    else:
+        tools_desc = "\n".join([f"- ID: {t.id} | Desc: {t.description}\n  Schema: {json.dumps(t.input_schema)}" for t in mcp_tools])
+
+    system_prompt = get_tool_agent_prompt(tools_desc=tools_desc, rag_context=rag_context, history_context=history)
+    
+    print(f"[🔧 ToolGen] Generating JSON...")
     response_json_str = call_ollama(
         prompt=user_text,
         model=RESPONSE_MODEL,
@@ -197,7 +201,7 @@ def tool_node(state: GraphState) -> GraphState:
             tool_args = {k: v for k, v in data.items() if k != "tool"}
             
             print(f"[🔨 Executing] {tool_name} {tool_args}")
-            res = execute_tool(tool_name, tool_args, container)
+            res = container.mcp_manager.execute_tool(tool_name, tool_args)
             
             tool_result_str = f"Tool '{tool_name}' executed. Result: {res}"
         else:

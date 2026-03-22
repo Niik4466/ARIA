@@ -11,6 +11,7 @@ def main():
     try:
         from src.container import Container
         container = Container()
+        container.mcp_manager.load_from_config("tools_config.json")
     except Exception as e:
         print(f"\n[Main] ❌ Error initializing container: {e}")
         sys.exit(1)
