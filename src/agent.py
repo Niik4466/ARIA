@@ -21,20 +21,16 @@ def print(*args, **kwargs):
 
 # 1. PROMPT FOR TOOL DECISOR NODE
 TOOL_DECISOR_SYSTEM_PROMPT = (
-    "You are the central brain of an assistant. Your sole function is to decide what type of expert "
+    "You are the central brain of an assistant. Your sole function is to decide what type of action "
     "should handle the user's request, based on the conversation history and the information found (RAG).\n\n"
     "{formatted_tools_context}"
-    "AVAILABLE CATEGORIES:\n"
-    "- 'search': To look for current information on the internet, news, weather.\n"
-    "- 'os': To interact with the operating system (create files or programs, execute commands, utilize media buttons).\n"
-    "- 'basic': For mathematical calculations or querying the time.\n"
-    "- 'autoconfig': To configure the assistant, mainly with voice or wakeword changes.\n"
-    "- 'response': WHEN YOU ALREADY HAVE ENOUGH INFORMATION to answer the user (e.g., if the RAG Information is sufficient), or if the request is a greeting/simple chat.\n"
-    "- 'exit': If the user requests to exit or close the program.\n"
-    "CRITICAL RULE: If a tool has ALREADY been executed for the user's request (you can see the result in the TOOL CONTEXT), you MUST choose 'response' to finish the task. DO NOT choose a tool category again if the task is already done.\n"
+    "AVAILABLE ACTIONS:\n"
+    "- 'tool': To use an external tool to get, create, or process information.\n"
+    "- 'response': WHEN YOU ALREADY HAVE ENOUGH INFORMATION to answer the user (e.g., if the RAG Information is sufficient), or if the request is a simple chat.\n"
+    "- 'exit': If the user explicitly requests to exit or close the program.\n"
+    "CRITICAL RULE: If a tool has ALREADY been executed for the user's request (you can see the result in the TOOL CONTEXT), you MUST choose 'response' to finish the task. DO NOT choose 'tool' again if the task is already done.\n"
     "If the RAG information is sufficient to answer the user, choose 'response'.\n"
-    "If the user asks to create, read, write, execute or delete a file or program, choose 'os'.\n"
-    "Respond ONLY with one of these words: search, os, basic, autoconfig, response."
+    "Respond ONLY with one of these words: tool, response, exit."
 )
 
 
@@ -52,17 +48,21 @@ RAG_DECISOR_SYSTEM_PROMPT = (
 
 # 2. PROMPT FOR TOOL GENERATION (Template)
 TOOL_GENERATION_PROMPT_TEMPLATE = (
-    "You are an expert agent in using tools of type: {category}.\n"
-    "Your goal is to generate the JSON to invoke the precise tool that resolves the request.\n\n"
-    "RAG CONTEXT (Retrieved information):\n"
-    "```\n{rag_context}\n```\n\n"
+    "You are an expert agent in using external tools.\n"
+    "Your goal is to generate the JSON to invoke the precise tool that resolves the user's request.\n\n"
     "HISTORY OF ACTIONS PERFORMED:\n"
     "```\n{history_context}\n```\n\n"
     "AVAILABLE TOOLS:\n"
     "{tools_desc}\n\n"
-    "OUTPUT FORMAT (Strict JSON):\n"
-    "- {{\"tool\": \"name\", \"arg1\": \"value\"}}\n"
-    "- {{\"tool\": \"name\"}}\n"
+    "IMPORTANT INSTRUCTIONS FOR JSON OUTPUT:\n"
+    "- You MUST respond with a single JSON object.\n"
+    "- It MUST contain a \"tool\" key with the exact ID of the tool you want to use.\n"
+    "- Any required arguments defined in the tool's Schema MUST be included directly alongside the \"tool\" key.\n"
+    "- Example format:\n"
+    "  {{\n"
+    "    \"tool\": \"server_name.tool_name\",\n"
+    "    \"parameter_name\": \"parameter_value\"\n"
+    "  }}\n"
     "- Respond ONLY with the JSON. No explanatory text.\n"
 )
 
@@ -170,9 +170,8 @@ def get_rag_decisor_prompt(rag_context: str) -> str:
     return RAG_DECISOR_SYSTEM_PROMPT.format(rag_context=rag_context)
 
 
-def get_tool_agent_prompt(category: str, rag_context: str = "", history_context: str = "") -> str:
-    tools_desc = get_tools_description(category)
-    return TOOL_GENERATION_PROMPT_TEMPLATE.format(category=category, tools_desc=tools_desc, rag_context=rag_context, history_context=history_context)
+def get_tool_agent_prompt(tools_desc: str, rag_context: str = "", history_context: str = "") -> str:
+    return TOOL_GENERATION_PROMPT_TEMPLATE.format(tools_desc=tools_desc, history_context=history_context)
 
 
 def get_final_response_prompt(tools_context: str = "", history_context: str = "", rag_context: str = "", language: str = "English") -> str:
