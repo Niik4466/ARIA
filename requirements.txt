@@ -1,24 +1,38 @@
-sounddevice==0.4.6
-webrtcvad==2.0.10
-numpy==1.26.4
-faster-whisper==1.0.3
-langgraph==0.2.49
-pydantic==2.9.2
-requests==2.32.3
-soundfile==0.12.1
-pynput==1.7.6
+# Core
+numpy>=1.26.4
+torch>=2.11.0
+
+# ASR
+faster-whisper>=1.0.3
+
+# TTS
 kokoro>=0.9.4
-chromadb
-pypdf
-ollama
-ddgs
-transformers
-accelerate
-datasets
-pywhispercpp
-torchaudio
-scikit-learn
-qwen-tts
-langchain-text-splitters
-sentence-transformers
-mcp
+qwen-tts>=0.1.1
+soundfile>=0.12.1
+
+# Audio I/O
+sounddevice>=0.4.6
+webrtcvad>=2.0.10
+
+# VAD / Wakeword
+transformers>=4.57.3
+scikit-learn>=1.7.2
+
+# RAG
+chromadb>=1.5.5
+pypdf>=6.9.2
+langchain-text-splitters>=0.3.11
+
+# Agent / Graph
+langgraph>=0.2.49
+requests>=2.32.3
+
+# MCP (optional)
+mcp>=1.12.4
+httpx>=0.28.1
+
+# Search
+ddgs>=9.12.0
+
+# Input control
+pynput>=1.7.6
