@@ -1,6 +1,8 @@
 import torch
 import numpy as np
-import sounddevice as sd
+import platform
+import subprocess
+import threading
 import queue
 import sys
 import time
@@ -46,48 +48,113 @@ class VAD:
 
 class VADAudioStream:
     """
-    Enhanced audio stream with pre-roll buffer and flexible silence detection.
+    Enhanced audio stream with pre-roll buffer and flexible silence detection 
+    utilizing FFmpeg as an intermediary layer. This solves hardware limitations
+    by pushing resampling tasks to FFmpeg directly.
     """
     def __init__(self, vad_instance):
         self.vad_iterator = vad_instance.get_iterator()
         self.window_size_samples = 512
         self.q = queue.Queue()
-        self.stream = None
+        self.process = None
+        self.capture_thread = None
         self.running = False
         
         # Pre-roll buffer (approx 0.5s of constant audio to avoid losing initial syllables)
         self.pre_roll_len = int((SAMPLE_RATE * 0.5) / self.window_size_samples)
         self.pre_roll_buffer = deque(maxlen=self.pre_roll_len)
 
-    def _callback(self, indata, frames, time, status):
-        """Audio stream callback."""
-        if status:
-            print(f"Audio stream status: {status}", file=sys.stderr)
-        chunk = indata.copy()
-        self.q.put(chunk)
-        # Always maintain some history for the pre-roll
-        self.pre_roll_buffer.append(chunk)
+    def _capture_loop(self):
+        """Continuously reads float32 audio chunks from FFmpeg stdout."""
+        bytes_per_sample = 4 # float32
+        chunk_bytes_size = self.window_size_samples * bytes_per_sample
+        
+        def read_exactly(stream, size):
+            buf = b''
+            while len(buf) < size:
+                chunk_data = stream.read(size - len(buf))
+                if not chunk_data:
+                    break
+                buf += chunk_data
+            return buf
+        
+        try:
+            while self.running and self.process and self.process.poll() is None:
+                raw_data = read_exactly(self.process.stdout, chunk_bytes_size)
+                if not raw_data or len(raw_data) < chunk_bytes_size:
+                    break
+                
+                # Convert bytes to numpy float32 array
+                chunk = np.frombuffer(raw_data, dtype=np.float32).copy()
+                self.q.put(chunk)
+                
+                # Always maintain some history for the pre-roll
+                self.pre_roll_buffer.append(chunk)
+        except Exception as e:
+            print(f"Error in audio capture loop: {e}", file=sys.stderr)
+        finally:
+            self.stop()
 
     def start(self):
-        """Starts the audio stream."""
+        """Starts the audio stream using FFmpeg subprocess for broader hardware compatibility."""
         if self.running:
             return
-        self.stream = sd.InputStream(
-            samplerate=SAMPLE_RATE, 
-            channels=1, 
-            blocksize=self.window_size_samples, 
-            dtype="float32", 
-            callback=self._callback
-        )
-        self.stream.start()
-        self.running = True
+            
+        system = platform.system()
+        # Default options for FFmpeg depending on the OS
+        if system == "Linux":
+            input_format = "pulse"
+            input_device = "default"
+        elif system == "Darwin":
+            input_format = "avfoundation"
+            input_device = ":0"
+        elif system == "Windows":
+            input_format = "dshow"
+            input_device = "audio=Microphone" # NOTE: Requires specific setup or modification per machine
+        else:
+            input_format = "pulse"
+            input_device = "default"
+
+        ffmpeg_cmd = [
+            "ffmpeg",
+            "-f", input_format,
+            "-i", input_device,
+            "-ar", str(SAMPLE_RATE),
+            "-ac", "1",
+            "-f", "f32le",
+            "-"
+        ]
+        
+        try:
+            self.process = subprocess.Popen(
+                ffmpeg_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL, # Ignore FFmpeg logs
+                bufsize=10**8
+            )
+            self.running = True
+            self.capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+            self.capture_thread.start()
+        except FileNotFoundError:
+            print("[Error] FFmpeg is not installed or not found in system PATH. Please install FFmpeg.", file=sys.stderr)
+            sys.exit(1)
+        except Exception as e:
+            print(f"Failed to start FFmpeg stream: {e}", file=sys.stderr)
+            sys.exit(1)
 
     def stop(self):
-        """Stops and closes the audio stream."""
-        if self.stream:
-            self.stream.stop()
-            self.stream.close()
-            self.running = False
+        """Stops the FFmpeg process and closes the stream."""
+        self.running = False
+        if self.process:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=2.0)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+            self.process = None
+        if self.capture_thread and self.capture_thread.is_alive():
+            if threading.current_thread() != self.capture_thread:
+                self.capture_thread.join(timeout=1.0)
 
     def clear_queue(self):
         """Clears the audio queue and resets VAD state."""
@@ -128,7 +195,13 @@ class VADAudioStream:
                     in_speech = False
                     if audio_buffer:
                         audio_buffer.append(chunk)
-                        return np.concatenate(audio_buffer).flatten()
+                        flat_audio = np.concatenate(audio_buffer).flatten()
+                        # Clear buffer for next speech
+                        audio_buffer = []
+                        # Ignore clicks/noise shorter than 0.8 seconds (12800 samples)
+                        if len(flat_audio) < int(SAMPLE_RATE * 0.8):
+                            continue
+                        return flat_audio
             
             if in_speech:
                 audio_buffer.append(chunk)

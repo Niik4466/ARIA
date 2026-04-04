@@ -37,6 +37,7 @@ To thoroughly understand A.R.I.A's internals and configure her brain limits, rev
 
 ### Prequisites
 * **Ollama**: Must be installed and running. [Download Ollama](https://ollama.com/download).
+* **FFmpeg**: Now required system-wide for microphone capture and resampling hardware audio inputs. Ensure it is accessible via PATH.
 
 ### Steps
 1. Clone this repository or download the source code.
