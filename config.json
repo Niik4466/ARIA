@@ -21,12 +21,12 @@
         "USER_NAME": "User",
         "API_URL": "http://127.0.0.1:11434/api/generate",
         "API_TYPE": "ollama",
-        "RESPONSE_MODEL": "qwen3.5:4b",
-        "DECISOR_MODEL": "qwen3.5:4b",
+        "RESPONSE_MODEL": "qwen3.5:2b",
+        "DECISOR_MODEL": "qwen3.5:2b",
         "AGENT_EXTRA_PROMPT": "You have a calm, neutral, and polite personality. You communicate clearly and respectfully."
     },
     "TTS": {
-        "USE_QWEN3_TTS": true,
+        "USE_QWEN3_TTS": false,
         "QWEN3_LANG": "English",
         "FLASH_ATTENTION": false,
         "KOKORO_LANG": "a",
@@ -41,6 +41,6 @@
         "DOCUMENTS_PATH": "./documents"
     },
     "Debug": {
-        "verbose_mode": false
+        "verbose_mode": true
     }
 }

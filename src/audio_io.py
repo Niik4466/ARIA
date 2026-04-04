@@ -6,6 +6,20 @@ import queue
 from .utils import Config
 config = Config()
 
+SUPPORTED_SAMPLE_RATES = [48000, 44100, 16000, 8000]
+
+def _resample_audio(audio, orig_sr, target_sr):
+    """Resample audio using scipy or fallback to linear interpolation."""
+    try:
+        from scipy.signal import resample
+        num_samples = int(len(audio) * target_sr / orig_sr)
+        return resample(audio, num_samples)
+    except ImportError:
+        # Fallback: simple linear interpolation
+        num_samples = int(len(audio) * target_sr / orig_sr)
+        indices = np.linspace(0, len(audio) - 1, num_samples)
+        return np.interp(indices, np.arange(len(audio)), audio)
+
 verbose_mode = config.get("verbose_mode")
 _builtins_print = print
 def print(*args, **kwargs):
@@ -57,8 +71,15 @@ class AudioPlayer:
                 audio = audio.astype(np.float32)
 
         try:
-            # Force integrity of sample rate
             sr = int(sr)
+            # Check if sample rate is supported by the device
+            if sr not in SUPPORTED_SAMPLE_RATES:
+                try:
+                    sd.check_output_settings(samplerate=sr)
+                except Exception:
+                    print(f"[AudioPlayer] Sample rate {sr} not supported, resampling to 48000...")
+                    audio = _resample_audio(audio, sr, 48000)
+                    sr = 48000
             sd.play(audio, sr)
             if blocking:
                 sd.wait()
