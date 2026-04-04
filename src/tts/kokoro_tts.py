@@ -25,10 +25,10 @@ KOKORO_LANG = config.get("KOKORO_LANG")
 KOKORO_VOICE = config.get("KOKORO_VOICE")
 KOKORO_SPEED = config.get("KOKORO_SPEED")
 
-from config import verbose_mode
+verbose = config.get("verbose_mode")
 _builtins_print = print
 def print(*args, **kwargs):
-    if verbose_mode:
+    if verbose:
         _builtins_print(*args, **kwargs)
 
 class Kokoro_TTS:

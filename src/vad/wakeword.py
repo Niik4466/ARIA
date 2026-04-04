@@ -47,7 +47,8 @@ class WakeWordSetup:
         self.setup_history = ""
 
     def _speak(self, instruction):
-        from config import USE_QWEN3_TTS, QWEN3_LANG
+        USE_QWEN3_TTS = config.get("USE_QWEN3_TTS")
+        QWEN3_LANG = config.get("QWEN3_LANG")
         from src.agent import call_ollama, clean_think_tags, clean_emojis, get_wakeword_prompt
         
         lang = QWEN3_LANG if USE_QWEN3_TTS else "Spanish"

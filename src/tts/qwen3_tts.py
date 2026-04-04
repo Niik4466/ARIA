@@ -19,11 +19,7 @@ from ..utils import Config
 config = Config()
 
 verbose_mode = config.get("verbose_mode")
-
-try:
-    from config import FLASH_ATTENTION
-except ImportError:
-    FLASH_ATTENTION = False
+FLASH_ATTENTION = config.get("FLASH_ATTENTION")
 
 if not verbose_mode:
     logging.getLogger("qwen_tts").setLevel(logging.ERROR)
