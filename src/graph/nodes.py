@@ -47,6 +47,9 @@ from src.agent import (
 )
 from .state import GraphState
 
+# Tool decisor valid categories decisions
+VALID_CATEGORIES = ['tool', 'response', 'exit']
+
 # --- Nodes ---
 
 def asr_node(state: GraphState) -> GraphState:
@@ -54,9 +57,18 @@ def asr_node(state: GraphState) -> GraphState:
     ASR NODE: Audio -> Text
     Converts audio to text and initializes history.
     """
+    state.setdefault("performance_metrics", [])
+    t0 = time.time()
     container = state["container"]
     audio = container.asr.listen()
+    t1_listen = time.time()
+    state["performance_metrics"].append({"operation": "asr_listen", "duration": t1_listen - t0})
+    
+    t1 = time.time()
     text = container.asr.speech_to_text(audio) or ""
+    t2 = time.time()
+    state["performance_metrics"].append({"operation": "asr_speech_to_text", "duration": t2 - t1})
+    
     print(f"[🎤 ASR] {text}")
     return {**state, "user_text": text}
 
@@ -67,11 +79,14 @@ def rag_decisor_node(state: GraphState) -> GraphState:
     is sufficient to answer the user.
     """
     state["start_time"] = time.time()
+    state.setdefault("performance_metrics", [])
     user_text = state["user_text"]
     container = state["container"]
     
     print(f"[📚 RAG] Querying Information for: '{user_text}'...")
+    t_start_rag = time.time()
     rag_context = container.rag_manager.query_documents(user_text)
+    state["performance_metrics"].append({"operation": "rag_query_documents", "duration": time.time() - t_start_rag})
     
     if not rag_context or not rag_context.strip():
         print("[📚 RAG Decisor] No relevant context found. Proceeding to tools.")
@@ -81,7 +96,9 @@ def rag_decisor_node(state: GraphState) -> GraphState:
     system_prompt = get_rag_decisor_prompt(rag_context)
 
     try:
+        t_start_llm = time.time()
         response = call_ollama(prompt=user_text, model=DECISOR_MODEL, system_prompt=system_prompt, think=False)
+        state["performance_metrics"].append({"operation": "rag_decisor_llm", "duration": time.time() - t_start_llm})
         decision = response.strip().lower().replace("'", "").replace('"', '').replace(".", "")
     except Exception as e:
         print(f"Error in RAG Decisor: {e}")
@@ -119,14 +136,16 @@ def tool_decisor_node(state: GraphState) -> GraphState:
     
     # Call Ollama
     try:
+        t_start_llm = time.time()
         response = call_ollama(prompt=user_text, model=DECISOR_MODEL, system_prompt=system_prompt)
+        state.setdefault("performance_metrics", []).append({"operation": "tool_decisor_llm", "duration": time.time() - t_start_llm})
         category = response.strip().lower()
         print(f"[🧠 Tool Decisor] said: {category}")
     except Exception as e:
         print(f"Error in Tool Decisor: {e}")
         category = "response"
 
-    valid_categories = ['tool', 'response', 'exit']
+    valid_categories = VALID_CATEGORIES
     found_category = next((c for c in valid_categories if c in category), "response")
     
     if found_category == "exit":
@@ -180,12 +199,14 @@ def tool_node(state: GraphState) -> GraphState:
     system_prompt = get_tool_agent_prompt(tools_desc=tools_desc, rag_context=rag_context, history_context=history)
     
     print(f"[🔧 ToolGen] Generating JSON...")
+    t_start_llm = time.time()
     response_json_str = call_ollama(
         prompt=user_text,
         model=RESPONSE_MODEL,
         system_prompt=system_prompt,
         json_mode=True,
     )
+    state.setdefault("performance_metrics", []).append({"operation": "tool_node_llm", "duration": time.time() - t_start_llm})
     
     # Exclude <think> tags from response
     response_json_str = clean_think_tags(response_json_str)
@@ -201,7 +222,9 @@ def tool_node(state: GraphState) -> GraphState:
             tool_args = {k: v for k, v in data.items() if k != "tool"}
             
             print(f"[🔨 Executing] {tool_name} {tool_args}")
+            t_start_exec = time.time()
             res = container.mcp_manager.execute_tool(tool_name, tool_args)
+            state.setdefault("performance_metrics", []).append({"operation": f"tool_eval_{tool_name}", "duration": time.time() - t_start_exec})
             
             tool_result_str = f"Tool '{tool_name}' executed. Result: {res}"
         else:
@@ -240,6 +263,9 @@ def generate_response_node(state: GraphState) -> GraphState:
     print(f"[✨ Generate] Generating streaming response...")
 
     # Text stream from Ollama
+    t_start_llm = time.time()
+    state.setdefault("performance_metrics", []).append({"operation": "generate_response_llm_init", "duration": time.time() - t_start_llm})
+    
     lang = QWEN3_LANG if USE_QWEN3_TTS else "English"
     text_stream = call_ollama_stream(
         prompt=user_text, 
@@ -272,23 +298,31 @@ def tts_response_node(state: GraphState) -> GraphState:
     start_time = state.get("start_time", time.time())
     ttfs_measured = False
     
+    playback_gaps = []
+    last_play_time = None
+    
     def playback_worker():
-        """Consumes audio chunks from the queue and plays them."""
-        nonlocal ttfs_measured
+        nonlocal ttfs_measured, last_play_time
         while True:
             item = audio_queue.get()
             if item is None:
                 audio_queue.task_done()
                 break
             
+            current_time = time.time()
+            if last_play_time is not None:
+                playback_gaps.append(current_time - last_play_time)
+            
             # Measure TTFS on first audio chunk
             if not ttfs_measured:
-                ttfs = time.time() - start_time
+                ttfs = current_time - start_time
+                state.setdefault("performance_metrics", []).append({"operation": "ttfs", "duration": ttfs})
                 print(f"\n[📊 METRIC] TIME TO FIRST SPEECH (TTFS): {ttfs:.4f} seconds")
                 ttfs_measured = True
 
             wav, sr = item
             container.audio_player.play(wav, sr)
+            last_play_time = time.time()
             audio_queue.task_done()
 
     pb_thread = threading.Thread(target=playback_worker, daemon=True)
@@ -318,6 +352,13 @@ def tts_response_node(state: GraphState) -> GraphState:
     audio_queue.put(None)
     audio_queue.join()
     pb_thread.join()
+    
+    # Calculate streaming gap delay metrics
+    if playback_gaps:
+        avg_gap = sum(playback_gaps) / len(playback_gaps)
+        state.setdefault("performance_metrics", []).append({"operation": "tts_streaming_gap_avg", "duration": avg_gap})
+        std_gap = float(np.std(playback_gaps))
+        state.setdefault("performance_metrics", []).append({"operation": "tts_streaming_gap_std", "duration": std_gap})
     
     full_reply = "".join(full_text_list)
     

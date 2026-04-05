@@ -1,0 +1,17 @@
+[
+    {
+        "id": "greeting",
+        "category": "general",
+        "prompt": "Hello ARIA, could you introduce yourself to me?"
+    },
+    {
+        "id": "rag_query",
+        "category": "rag_search",
+        "prompt": "How does the hierarchical RAG router work?"
+    },
+    {
+        "id": "tool_query",
+        "category": "tool_execution",
+        "prompt": "Please tell me the current weather."
+    }
+]

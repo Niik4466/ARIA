@@ -41,6 +41,7 @@ class GraphState(TypedDict, total=False):
     
     # Metrics
     start_time: float
+    performance_metrics: list
 
     # Backend Container
     container: Container
