@@ -4,6 +4,10 @@ import sys
 import os
 import time
 
+# PyTorch/CUDA cannot be forked safely in Linux. We must spawn clean subprocesses.
+if multiprocessing.get_start_method(allow_none=True) != 'spawn':
+    multiprocessing.set_start_method('spawn', force=True)
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 # Configuration Timeout Limit (in seconds)
