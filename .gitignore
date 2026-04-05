@@ -122,3 +122,8 @@ documents/*
 
 # Logs
 logs/*
+
+# Tests
+MagicMock/
+tests/performance_results.csv
+tests/golden_dataset.json
