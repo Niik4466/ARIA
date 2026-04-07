@@ -27,13 +27,6 @@ def container():
     print("\n[Pytest] Initializing Component Container...")
     c = Container()
     
-    # 1. Mute the audio player, calculate sleep time based on sr for realistic delay in gap simulation
-    def fake_play(wav, sr):
-        duration = len(wav) / sr
-        time.sleep(duration / 2) # Speed up simulation while keeping an authentic streaming gap measurable
-    
-    c.audio_player.play = fake_play
-    
     # 2. Mock MCP Manager to prevent hangs and simulate valid tools
     class MockTool:
         def __init__(self, t_id, desc, input_schema):
@@ -76,17 +69,14 @@ def run_graph_mocked(container, text_prompt):
         print(f"[Pytest] Warning - Could not mock via actual TTS ({e}). Using empty array.")
         wav, sr = np.zeros(16000, dtype=np.float32), 16000
     
-    # 2. Patch listner
-    original_listen = getattr(container.asr, "listen", lambda: None)
-    container.asr.listen = lambda timeout=10.0: wav
-    
-    # 3. Simulate Graph State iteration
+    # Simulate Graph State iteration
     state: GraphState = {
         "container": container,
         "history_context": "",
         "tools_context": "",
         "iteration_count": 0,
-        "performance_metrics": []
+        "performance_metrics": [],
+        "input_audio": wav
     }
     
     try:
@@ -106,9 +96,10 @@ def run_graph_mocked(container, text_prompt):
         if state.get("next_node") != "end":
             state = generate_response_node(state)
             state = tts_response_node(state)
+            list(state.get("audio_stream", [])) # Exhaust generator to simulate client execution
             
     finally:
-        container.asr.listen = original_listen
+        pass
         
     return state.get("performance_metrics", [])
 

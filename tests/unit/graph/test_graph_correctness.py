@@ -95,7 +95,10 @@ def test_graph_route_base_response(mock_graph_container):
         assert not final_state.get("tools_context"), "Tool execution bypassed, result should be empty."
         
         # Final response validation
-        assert "Hi there" in final_state["reply_text"], "Generate_response node did not construct LLM buffer correctly."
+        list(final_state.get("audio_stream", []))
+        mock_graph_container.memory_manager.update_after_interaction.assert_called_once()
+        args_tuple = mock_graph_container.memory_manager.update_after_interaction.call_args[0]
+        assert "Hi there" in args_tuple[1], "Generate_response node did not construct LLM buffer correctly."
 
 
 def test_graph_route_rag_injection(mock_graph_container):
@@ -124,7 +127,10 @@ def test_graph_route_rag_injection(mock_graph_container):
         # "needs_rag" is technically not used, it sets next_node="generate_response"
         assert final_state.get("next_node") == "generate_response"
         assert final_state.get("rag_context") == "REFERENCE DOCUMENTS:\nFound RAG context.", "rag_node failed to execute or inject array."
-        assert "Based on RAG..." in final_state["reply_text"], "Response missing stream generation."
+        list(final_state.get("audio_stream", []))
+        mock_graph_container.memory_manager.update_after_interaction.assert_called_once()
+        args_tuple = mock_graph_container.memory_manager.update_after_interaction.call_args[0]
+        assert "Based on RAG..." in args_tuple[1], "Response missing stream generation."
 
 
 from src.graph.nodes import VALID_CATEGORIES
@@ -165,15 +171,21 @@ def test_graph_route_dynamic_tool_decisor(mock_graph_container, category):
         if category == "exit":
             assert final_state.get("selected_category") == "exit"
             assert final_state.get("next_node") == "end"
-            assert not final_state.get("reply_text")
+            assert not final_state.get("audio_stream")
         elif category == "tool":
             # the tool loop converges to response natively
             assert final_state.get("selected_category") == "response"
             assert "tool_executed" in str(final_state.get("tools_context", ""))
-            assert "Dynamic run." in final_state["reply_text"]
+            list(final_state.get("audio_stream", []))
+            mock_graph_container.memory_manager.update_after_interaction.assert_called()
+            args_tuple = mock_graph_container.memory_manager.update_after_interaction.call_args[0]
+            assert "Dynamic run." in args_tuple[1]
         elif category == "response":
             assert final_state.get("selected_category") == "response"
-            assert "Dynamic run." in final_state["reply_text"]
+            list(final_state.get("audio_stream", []))
+            mock_graph_container.memory_manager.update_after_interaction.assert_called()
+            args_tuple = mock_graph_container.memory_manager.update_after_interaction.call_args[0]
+            assert "Dynamic run." in args_tuple[1]
 
 def test_langgraph_structural_edges():
     """LangGraph built-in structure introspection."""

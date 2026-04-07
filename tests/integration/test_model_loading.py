@@ -19,11 +19,8 @@ def _load_rag_manager():
     _ = RAGManager()
 
 def _load_asr():
-    from src.vad.vad import VAD
     from src.asr import ASR
-    # Using real VAD instantiation to chain integration properly based on config.json
-    vad = VAD()
-    _ = ASR(vad)
+    _ = ASR()
 
 def _load_tts():
     # Only testing Kokoro by default, Qwen3 requires larger manual downloads usually
@@ -31,12 +28,12 @@ def _load_tts():
     _ = Kokoro_TTS()
 
 def _load_vad():
-    from src.vad.vad import VAD
+    from tui_client.vad.vad import VAD
     _ = VAD()
 
 def _load_wakeword():
-    from src.vad.vad import VAD
-    from src.vad.wakeword import WakeWord
+    from tui_client.vad.vad import VAD
+    from tui_client.vad.wakeword import WakeWord
     # Using real dependencies
     vad = VAD()
     _ = WakeWord(vad)

@@ -13,10 +13,7 @@ def test_container_initialization(clean_config):
     
     # We must mock config specifically so we can toggle usage parameters efficiently
     with patch("src.utils.Config.get") as mock_get, \
-         patch("src.container.VAD"), \
          patch("src.container.ASR"), \
-         patch("src.container.WakeWordSetup"), \
-         patch("src.container.WakeWord"), \
          patch("src.container.RAGManager"), \
          patch("src.container.MCPManager"), \
          patch("src.container.MemoryManager"):
@@ -30,7 +27,6 @@ def test_container_initialization(clean_config):
         
         container = Container()
         
-        assert container.vad is not None
         assert container.asr is not None
         assert getattr(container, "tts", None) is not None
         assert container.rvc is None # Since we dictated USE_RVC=False
@@ -41,10 +37,7 @@ def test_container_loads_qwen3_tts_when_configured(clean_config):
     from src.container import Container
     
     with patch("src.utils.Config.get") as mock_get, \
-         patch("src.container.VAD"), \
          patch("src.container.ASR"), \
-         patch("src.container.WakeWordSetup"), \
-         patch("src.container.WakeWord"), \
          patch("src.container.RAGManager"), \
          patch("src.container.MCPManager"), \
          patch("src.container.MemoryManager"), \

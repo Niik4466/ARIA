@@ -19,7 +19,7 @@ def mock_heavy_dependencies():
         patch("sounddevice.play"),
         patch("sounddevice.wait"),
         patch("sounddevice.stop"),
-        patch("src.vad.wakeword.WavLMModel"),
+        patch("tui_client.vad.wakeword.WavLMModel"),
         patch("src.agent.call_ollama"),
         patch("src.agent.call_ollama_stream")
     ]
