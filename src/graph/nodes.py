@@ -30,7 +30,6 @@ USE_QWEN3_TTS = config.get("USE_QWEN3_TTS")
 USE_RVC = config.get("USE_RVC")
 QWEN3_LANG = config.get("QWEN3_LANG")
 from src.vad.vad import VAD
-from src.vad.wakeword import WakeWord, WakeWordSetup
 from src.asr import ASR
 from src.agent import (
     call_ollama, 
@@ -41,8 +40,6 @@ from src.agent import (
     get_tool_agent_prompt,
     get_final_response_prompt,
     call_ollama_stream,
-    get_acknowledgement_prompt,
-    get_farewell_prompt,
     get_waiting_prompt
 )
 from .state import GraphState
@@ -83,17 +80,32 @@ def rag_decisor_node(state: GraphState) -> GraphState:
     user_text = state["user_text"]
     container = state["container"]
     
+    # Check Extended STM for Dual Query
+    q2 = container.memory_manager.handle_dual_query(user_text)
+    
     print(f"[📚 RAG] Querying Information for: '{user_text}'...")
     t_start_rag = time.time()
-    rag_context = container.rag_manager.query_documents(user_text)
+    rag_context = container.rag_manager.query_documents(user_text, query2=q2)
     state["performance_metrics"].append({"operation": "rag_query_documents", "duration": time.time() - t_start_rag})
     
-    if not rag_context or not rag_context.strip():
-        print("[📚 RAG Decisor] No relevant context found. Proceeding to tools.")
+    # Retrieve LTM Insights and inject
+    insights = container.memory_manager.retrieve_relevant_insights(user_text)
+    
+    # Combine Contexts
+    full_context = ""
+    if insights:
+        full_context += f"USER INSIGHTS (Traits/Preferences):\n{insights}\n\n"
+    if rag_context:
+        full_context += f"REFERENCE DOCUMENTS:\n{rag_context}\n"
+        
+    full_context = full_context.strip()
+
+    if not full_context:
+        print("[📚 RAG Decisor] No relevant context or insights found. Proceeding to tools.")
         return {**state, "rag_context": "", "next_node": "tool_decisor"}
 
     print("[📚 RAG Decisor] Context retrieved. Evaluating relevance...")
-    system_prompt = get_rag_decisor_prompt(rag_context)
+    system_prompt = get_rag_decisor_prompt(full_context)
 
     try:
         t_start_llm = time.time()
@@ -108,10 +120,10 @@ def rag_decisor_node(state: GraphState) -> GraphState:
 
     if "yes" in decision:
         print("[🧠 RAG Decisor] Context is sufficient. Routing to response.")
-        return {**state, "rag_context": rag_context, "next_node": "generate_response"}
+        return {**state, "rag_context": full_context, "next_node": "generate_response"}
     else:
         print("[🧠 RAG Decisor] Context insufficient. Proceeding to tools.")
-        return {**state, "next_node": "tool_decisor"}
+        return {**state, "rag_context": full_context, "next_node": "tool_decisor"}
 
 
 def tool_decisor_node(state: GraphState) -> GraphState:
@@ -362,8 +374,8 @@ def tts_response_node(state: GraphState) -> GraphState:
     
     full_reply = "".join(full_text_list)
     
-    # Add history to RAG
-    print(f"[✨ Integrated] Registering conversation in RAG history...")
-    container.rag_manager.add_to_history(user_text, full_reply)
+    # Update STM and LTM Memory Systems
+    print(f"[✨ Integrated] Updating Memory System...")
+    container.memory_manager.update_after_interaction(user_text, full_reply)
     
     return {**state, "reply_text": full_reply}

@@ -159,6 +159,40 @@ WAKEWORD_CONFIG_SYSTEM_PROMPT = (
 
 
 
+# 7. PROMPT FOR LTM INSIGHT EXTRACTION
+INSIGHT_EXTRACTION_PROMPT = (
+    "Extract persistent traits, preferences, or goals from the user's query.\n"
+    "Only extract long-term insights (e.g., 'beginner in programming', 'interested in AI', 'speaks spanish').\n"
+    "DO NOT extract one-time questions, facts, or redundant data.\n"
+    "If there are no meaningful long-term insights in the query, respond EXACTLY with: no insights\n"
+    "Format as a concise bulleted list of keywords/short phrases.\n\n"
+    "USER QUERY:\n{query}\n\n"
+    "Respond ONLY with the insights or 'no insights', without additional text."
+)
+
+
+# 8. PROMPT FOR STM EXTENDED INTENT EXTRACTION
+INTENT_EXTRACTION_PROMPT = (
+    "Extract the core intent and constraints from the user query.\n"
+    "Format exactly as:\n"
+    "- intent: [core intent]\n"
+    "- constraint: [key constraints if any]\n\n"
+    "USER QUERY:\n{query}\n\n"
+    "Respond ONLY with the formatted intent/constraint."
+)
+
+
+# 9. PROMPT FOR DUAL QUERY ENRICHMENT (Q2)
+QUERY_ENRICHMENT_PROMPT = (
+    "You are a query enhancer. Enhance the user's original query (Q1) using the short-term context (STM).\n"
+    "Combine the original query with the STM intent to create a more specific, independent search query (Q2).\n"
+    "CRITICAL RULE: DO NOT answer the query. Just output the enhanced query string.\n\n"
+    "ORIGINAL QUERY (Q1): {query}\n"
+    "SHORT-TERM CONTEXT (STM):\n{stm_context}\n\n"
+    "ENHANCED QUERY (Q2):"
+)
+
+
 def get_tool_decisor_prompt(tools_context: str = "") -> str:
     formatted_tools = f"TOOL CONTEXT:\n```\n{tools_context}\n```\n\n" if tools_context else ""
     return TOOL_DECISOR_SYSTEM_PROMPT.format(
@@ -200,6 +234,18 @@ def get_farewell_prompt(language: str = "English") -> str:
 
 def get_wakeword_prompt(language: str = "English", history: str = "") -> str:
     return WAKEWORD_CONFIG_SYSTEM_PROMPT.format(language=language, history=history)
+
+
+def get_insight_extraction_prompt(query: str) -> str:
+    return INSIGHT_EXTRACTION_PROMPT.format(query=query)
+
+
+def get_intent_extraction_prompt(query: str) -> str:
+    return INTENT_EXTRACTION_PROMPT.format(query=query)
+
+
+def get_query_enrichment_prompt(query: str, stm_context: str) -> str:
+    return QUERY_ENRICHMENT_PROMPT.format(query=query, stm_context=stm_context)
 
 
 def clean_emojis(text: str) -> str:

@@ -42,5 +42,10 @@
     },
     "Debug": {
         "verbose_mode": true
+    },
+    "Memory": {
+        "IMMEDIATE_STM_TTL": 30.0,
+        "EXTENDED_STM_TTL": 120.0,
+        "INSIGHT_THRESHOLD": 0.70
     }
 }

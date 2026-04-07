@@ -1,4 +1,5 @@
 import os
+import time
 from collections import defaultdict
 import chromadb
 from chromadb.utils import embedding_functions
@@ -49,6 +50,47 @@ class RAGManager:
             embedding_function=self.embedding_fn,
             metadata={"hnsw:space": "cosine"}
         )
+        
+        # Collection for LTM Insights
+        self.insights_collection = self.client.get_or_create_collection(
+            name="ltm_insights",
+            embedding_function=self.embedding_fn,
+            metadata={"hnsw:space": "cosine"}
+        )
+
+    def write_insight(self, insight_text: str):
+        idx = str(int(time.time() * 1000))
+        try:
+            self.insights_collection.add(
+                documents=[insight_text],
+                ids=[f"ins_{idx}"]
+            )
+        except Exception as e:
+            print(f"[RAG Error] Error writing insight: {e}")
+
+    def get_insights(self, query: str, k: int = 3) -> list:
+        try:
+            if self.insights_collection.count() == 0:
+                return []
+            n = min(k, self.insights_collection.count())
+            results = self.insights_collection.query(
+                query_texts=[query],
+                n_results=n,
+                include=["documents", "distances"]
+            )
+            
+            insights = []
+            if results.get('documents') and len(results['documents']) > 0 and len(results['documents'][0]) > 0:
+                for doc, dist in zip(results['documents'][0], results['distances'][0]):
+                    similarity = 1.0 - dist
+                    insights.append({
+                        "text": doc,
+                        "similarity": similarity
+                    })
+            return insights
+        except Exception as e:
+            print(f"[RAG Error] Error querying insights: {e}")
+            return []
 
 
     def _read_pdf(self, path: str) -> str:
@@ -204,14 +246,14 @@ class RAGManager:
         return categories_metadata
 
 
-    def retrieve_global(self, query: str, k: int = 20) -> list:
+    def retrieve_global(self, query_texts: list, k: int = 20) -> list:
         """
         Hierarchical Level 1: Global Retrieval (Router).
-        Retrieves the top-k documents globally across all categories.
+        Retrieves the top-k documents globally across all categories for all provided queries.
         """
         try:
             results = self.docs_collection.query(
-                query_texts=[query],
+                query_texts=query_texts,
                 n_results=k,
                 include=["documents", "metadatas", "distances"]
             )
@@ -220,22 +262,28 @@ class RAGManager:
             return []
             
         retrieved_docs = []
-        if results.get('documents') and len(results['documents']) > 0 and len(results['documents'][0]) > 0:
-            docs = results['documents'][0]
-            metas = results['metadatas'][0]
-            distances = results['distances'][0]
-            
-            for doc, meta, dist in zip(docs, metas, distances):
-                # Cosine space distance: similarity = 1 - distance
-                similarity = 1.0 - dist
-                category = meta.get("category", "unknown")
-                source = meta.get("source", "unknown")
-                retrieved_docs.append({
-                    "text": doc,
-                    "category": category,
-                    "source": source,
-                    "similarity": similarity
-                })
+        seen_keys = set()
+        
+        if results.get('documents'):
+            for i in range(len(results['documents'])):
+                docs = results['documents'][i]
+                metas = results['metadatas'][i]
+                distances = results['distances'][i]
+                
+                for doc, meta, dist in zip(docs, metas, distances):
+                    similarity = 1.0 - dist
+                    category = meta.get("category", "unknown")
+                    source = meta.get("source", "unknown")
+                    
+                    key = (source, doc)
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        retrieved_docs.append({
+                            "text": doc,
+                            "category": category,
+                            "source": source,
+                            "similarity": similarity
+                        })
         return retrieved_docs
 
 
@@ -254,39 +302,48 @@ class RAGManager:
         return best_category
 
 
-    def query_category(self, category: str, query_text: str, n_results: int = 8) -> str:
+    def query_category(self, category: str, query_texts: list, n_results: int = 8) -> str:
         """
         Hierarchical Level 2: Restricted search within a specific category.
-        Used internally by query_documents, but exposed if direct search is needed.
+        Accepts a list of queries. Deduplicates excerpts.
         """
         try:
             results = self.docs_collection.query(
-                query_texts=[query_text],
+                query_texts=query_texts,
                 n_results=n_results,
                 where={"category": category},
                 include=["documents", "metadatas"]
             )
             
             context = ""
-            if results.get('documents') and len(results['documents']) > 0 and len(results['documents'][0]) > 0:
-                for i, doc in enumerate(results['documents'][0]):
-                    source = results['metadatas'][0][i].get('source', 'unknown')
-                    context += f"--- Excerpt from {source} ---\n{doc}\n\n"
+            seen_docs = set()
+            if results.get('documents'):
+                for i in range(len(results['documents'])):
+                    for j, doc in enumerate(results['documents'][i]):
+                        if doc not in seen_docs:
+                            seen_docs.add(doc)
+                            source = results['metadatas'][i][j].get('source', 'unknown')
+                            context += f"--- Excerpt from {source} ---\n{doc}\n\n"
             
             return context.strip()
         except Exception as e:
             return f"[RAG Error] Could not search in category {category}: {e}"
 
 
-    def query_documents(self, query: str) -> str:
+    def query_documents(self, query: str, query2: str = None) -> str:
         """
         Executes the full two-level hierarchical RAG retrieval.
+        Supports Dual Query execution for memory enhanced queries.
         Returns the formatted context retrieved from the best category.
         """
-        print(f"[📚 RAG] Performing hierarchical search for query...")
+        queries = [query]
+        if query2:
+            queries.append(query2)
+            
+        print(f"[📚 RAG] Performing hierarchical search for {len(queries)} queries...")
         
         # Level 1: Global retrieval & vote
-        global_docs = self.retrieve_global(query, k=20)
+        global_docs = self.retrieve_global(queries, k=20)
         if not global_docs:
             print("[📚 RAG] No documents retrieved.")
             return ""
@@ -298,7 +355,7 @@ class RAGManager:
             return ""
             
         # Level 2: Category retrieval
-        return self.query_category(best_category, query, n_results=8)
+        return self.query_category(best_category, queries, n_results=8)
 
 
     def add_to_history(self, user_text: str, agent_response: str):

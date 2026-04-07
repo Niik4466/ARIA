@@ -20,6 +20,7 @@ from src.asr import ASR
 from src.rag import RAGManager
 from src.audio_io import player
 from src.mcp.mcp_manager import MCPManager
+from src.memory import MemoryManager
 
 class Container:
     """
@@ -83,5 +84,10 @@ class Container:
         print("🔄 Initializing MCP system...")
         self.mcp_manager = MCPManager(self.rag_manager)
         print("✅ MCP Initialized.")
+
+        # Memory Initialization
+        print("🔄 Initializing Memory system...")
+        self.memory_manager = MemoryManager(self.rag_manager)
+        print("✅ Memory Initialized.")
 
         print("--- BACKEND CONTAINER READY ---\n")
