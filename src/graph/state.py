@@ -17,6 +17,9 @@ from src.container import Container
 
 # --- Graph State ---
 class GraphState(TypedDict, total=False):
+    # Input audio
+    input_audio: Any
+    
     # Transcribed text from user
     user_text: str
     
@@ -35,6 +38,7 @@ class GraphState(TypedDict, total=False):
     
     # Stream capability
     text_stream: Any           # Generator for LLM's text output
+    audio_stream: Any          # Generator for TTS output
     
     # Final response
     reply_text: str

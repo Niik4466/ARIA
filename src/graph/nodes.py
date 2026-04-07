@@ -29,8 +29,7 @@ RESPONSE_MODEL = config.get("RESPONSE_MODEL")
 USE_QWEN3_TTS = config.get("USE_QWEN3_TTS")
 USE_RVC = config.get("USE_RVC")
 QWEN3_LANG = config.get("QWEN3_LANG")
-from src.vad.vad import VAD
-from src.asr import ASR
+
 from src.agent import (
     call_ollama, 
     clean_think_tags, 
@@ -57,9 +56,9 @@ def asr_node(state: GraphState) -> GraphState:
     state.setdefault("performance_metrics", [])
     t0 = time.time()
     container = state["container"]
-    audio = container.asr.listen()
+    audio = state.get("input_audio")
     t1_listen = time.time()
-    state["performance_metrics"].append({"operation": "asr_listen", "duration": t1_listen - t0})
+    state["performance_metrics"].append({"operation": "asr_fetch_input", "duration": t1_listen - t0})
     
     t1 = time.time()
     text = container.asr.speech_to_text(audio) or ""
@@ -185,15 +184,7 @@ def tool_node(state: GraphState) -> GraphState:
             wait_text = call_ollama(prompt="Generate waiting phrase", system_prompt=wait_prompt, temperature=0.7)
             wait_text = clean_think_tags(wait_text)
             wait_text = clean_emojis(wait_text)
-            print(f"[🤖 ARIA] {wait_text}")
-        
-            lang = QWEN3_LANG if USE_QWEN3_TTS else "Spanish"
-            wav, sr = container.tts.generate_speech(wait_text, languaje=lang)
-        
-            if wav is not None:
-                if container.rvc:
-                    wav, sr = container.rvc.transform_numpy(wav, sr)
-                container.audio_player.play_async(wav, sr)
+            print(f"[🤖 ARIA -> Tool Wait] {wait_text}")
         except Exception as e:
             print(f"[System] ⚠️ Error in waiting response: {e}")
 
@@ -291,8 +282,8 @@ def generate_response_node(state: GraphState) -> GraphState:
 def tts_response_node(state: GraphState) -> GraphState:
     """
     TTS RESPONSE NODE:
-    Consumes the text stream, generating audio chunks and playing them.
-    Saves the final text to the RAG history context.
+    Provides a generator in state["audio_stream"] that consumes the text_stream,
+    yields audio chunks to the client, and updates RAG history at the end.
     """
     container = state["container"]
     text_stream = state.get("text_stream")
@@ -303,79 +294,26 @@ def tts_response_node(state: GraphState) -> GraphState:
         print("[System] ⚠️ Error: No text stream provided to TTS node.")
         return state
         
-    print(f"[🔊 TTS] Generating audio from stream...")
+    print(f"[🔊 TTS] Graph successfully queued audio stream generator.")
 
-    # 1. Setup Audio Queue and Playback Worker
-    audio_queue = queue.Queue()
-    start_time = state.get("start_time", time.time())
-    ttfs_measured = False
-    
-    playback_gaps = []
-    last_play_time = None
-    
-    def playback_worker():
-        nonlocal ttfs_measured, last_play_time
-        while True:
-            item = audio_queue.get()
-            if item is None:
-                audio_queue.task_done()
-                break
-            
-            current_time = time.time()
-            if last_play_time is not None:
-                playback_gaps.append(current_time - last_play_time)
-            
-            # Measure TTFS on first audio chunk
-            if not ttfs_measured:
-                ttfs = current_time - start_time
-                state.setdefault("performance_metrics", []).append({"operation": "ttfs", "duration": ttfs})
-                print(f"\n[📊 METRIC] TIME TO FIRST SPEECH (TTFS): {ttfs:.4f} seconds")
-                ttfs_measured = True
-
-            wav, sr = item
-            container.audio_player.play(wav, sr)
-            last_play_time = time.time()
-            audio_queue.task_done()
-
-    pb_thread = threading.Thread(target=playback_worker, daemon=True)
-    pb_thread.start()
-
-    # 2. Wrap stream to capture full text for state
-    full_text_list = []
-    def text_spy(stream):
-        for chunk in stream:
-            full_text_list.append(chunk)
-            yield chunk
-
-    # 3. Generate audio from text stream and put in queue
-    try:
-        # We use the configured language or fallback to Spanish
-        for wav, sr in container.tts.generate_speech_stream(text_spy(text_stream), languaje=lang):
-            # Apply RVC if enabled
-            if container.rvc:
-                wav, sr = container.rvc.transform_numpy(wav, sr)
+    def audio_generator():
+        full_text_list = []
+        def text_spy(stream):
+            for chunk in stream:
+                full_text_list.append(chunk)
+                yield chunk
                 
-            audio_queue.put((wav, sr))
+        try:
+            for wav, sr in container.tts.generate_speech_stream(text_spy(text_stream), languaje=lang):
+                if container.rvc:
+                    wav, sr = container.rvc.transform_numpy(wav, sr)
+                yield wav, sr
+        except Exception as e:
+            print(f"[TTS Node] ❌ Error in stream processing: {e}")
             
-    except Exception as e:
-        print(f"[TTS Node] ❌ Error in stream processing: {e}")
+        full_reply = "".join(full_text_list)
+        print(f"[✨ Integrated] Updating Memory System...")
+        container.memory_manager.update_after_interaction(user_text, full_reply)
 
-    # 4. Cleanup: Signal worker to stop and wait
-    audio_queue.put(None)
-    audio_queue.join()
-    pb_thread.join()
-    
-    # Calculate streaming gap delay metrics
-    if playback_gaps:
-        avg_gap = sum(playback_gaps) / len(playback_gaps)
-        state.setdefault("performance_metrics", []).append({"operation": "tts_streaming_gap_avg", "duration": avg_gap})
-        std_gap = float(np.std(playback_gaps))
-        state.setdefault("performance_metrics", []).append({"operation": "tts_streaming_gap_std", "duration": std_gap})
-    
-    full_reply = "".join(full_text_list)
-    
-    # Update STM and LTM Memory Systems
-    print(f"[✨ Integrated] Updating Memory System...")
-    container.memory_manager.update_after_interaction(user_text, full_reply)
-    
-    return {**state, "reply_text": full_reply}
+    return {**state, "audio_stream": audio_generator()}
+
