@@ -8,6 +8,8 @@ def get_base_state():
     mock_container = MagicMock()
     # Provide mock returns for heavily used things
     mock_container.rag_manager.query_documents.return_value = "Fake Context"
+    mock_container.memory_manager.retrieve_relevant_insights.return_value = ""
+    mock_container.memory_manager.handle_dual_query.return_value = None
     return {
         "user_text": "Hi",
         "container": mock_container,
@@ -22,7 +24,7 @@ def test_rag_decisor_node_yes():
         new_state = rag_decisor_node(state)
         
         assert new_state["next_node"] == "generate_response"
-        assert new_state["rag_context"] == "Fake Context"
+        assert new_state["rag_context"] == "REFERENCE DOCUMENTS:\nFake Context"
 
 def test_rag_decisor_node_no():
     from src.graph.nodes import rag_decisor_node

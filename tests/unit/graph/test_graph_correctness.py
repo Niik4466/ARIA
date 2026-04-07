@@ -42,18 +42,25 @@ def mock_graph_container():
     container_instance.rag_manager.query_documents.return_value = "Found RAG context."
     container_instance.rag_manager.query_history.return_value = "Found RAG history."
     
+    # Memory Manager Mock
+    container_instance.memory_manager = MagicMock()
+    container_instance.memory_manager.retrieve_relevant_insights.return_value = ""
+    container_instance.memory_manager.handle_dual_query.return_value = None
+    
     return container_instance
 
 def test_graph_route_base_response(mock_graph_container):
     """
     Test the base routing: asr_node -> rag_decisor -> tool_decisor -> generate -> tts -> END
     """
+    mock_graph_container.rag_manager.query_documents.return_value = ""
+    
     # Mock LLM decision path: NO RAG, NO TOOL (Response mode)
     with patch("src.graph.nodes.call_ollama") as mock_ollama, \
          patch("src.graph.nodes.call_ollama_stream") as mock_generate:
         
-        # Two calls for decisors. First is RAG ("no"), Second is Tool ("response")
-        mock_ollama.side_effect = ["no", "response"]
+        # Only Tool ("response") evaluates because RAG logic returns early due to empty mock context
+        mock_ollama.side_effect = ["response"]
         
         # Stream logic mock
         mock_generate.return_value = ["Hi ", "there"]
@@ -116,7 +123,7 @@ def test_graph_route_rag_injection(mock_graph_container):
         
         # "needs_rag" is technically not used, it sets next_node="generate_response"
         assert final_state.get("next_node") == "generate_response"
-        assert final_state.get("rag_context") == "Found RAG context.", "rag_node failed to execute or inject array."
+        assert final_state.get("rag_context") == "REFERENCE DOCUMENTS:\nFound RAG context.", "rag_node failed to execute or inject array."
         assert "Based on RAG..." in final_state["reply_text"], "Response missing stream generation."
 
 

@@ -18,7 +18,8 @@ def test_container_initialization(clean_config):
          patch("src.container.WakeWordSetup"), \
          patch("src.container.WakeWord"), \
          patch("src.container.RAGManager"), \
-         patch("src.container.MCPManager"):
+         patch("src.container.MCPManager"), \
+         patch("src.container.MemoryManager"):
         
         # Mock answers for initial values
         def mock_config_get(key, default=None):
@@ -46,6 +47,7 @@ def test_container_loads_qwen3_tts_when_configured(clean_config):
          patch("src.container.WakeWord"), \
          patch("src.container.RAGManager"), \
          patch("src.container.MCPManager"), \
+         patch("src.container.MemoryManager"), \
          patch("src.tts.qwen3_tts.Qwen3_TTS"), \
          patch("src.tts.rvc_backend.RVC_Backend"):
         
