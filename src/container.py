@@ -14,13 +14,11 @@ if _root_dir not in sys.path:
     sys.path.append(_root_dir)
 
 from src.utils import Config
-from src.vad.vad import VAD
-from src.vad.wakeword import WakeWord, WakeWordSetup
 from src.asr import ASR
 from src.rag import RAGManager
-from src.audio_io import player
 from src.mcp.mcp_manager import MCPManager
 from src.memory import MemoryManager
+from src.logger import mlog as print
 
 class Container:
     """
@@ -34,8 +32,7 @@ class Container:
         self.use_rvc = self.config.get("USE_RVC")
         
         # Initialize Core Components
-        self.vad = VAD()
-        self.asr = ASR(self.vad)
+        self.asr = ASR()
         
         if self.use_qwen3_tts:
             from src.tts.qwen3_tts import Qwen3_TTS, QwenVoiceSetup
@@ -50,25 +47,6 @@ class Container:
             self.rvc = RVC_Backend()
         else:
             self.rvc = None
-            
-        self.audio_player = player
-        
-        # Wakeword and Samples
-        self.samples_dir = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "vad", "samples")
-        )
-        
-        self.ww_setup = WakeWordSetup(
-            self.vad, 
-            self.samples_dir, 
-            tts=self.tts, 
-            rvc=self.rvc, 
-            audio_player=self.audio_player
-        )
-        if not self.ww_setup.has_enough_samples():
-            self.ww_setup.new_wakeword_samples()
-            
-        self.wake_word = WakeWord(self.vad, samples_dir=self.samples_dir)
         
         # RAG Initialization
         print("🔄 Initializing RAG system...")

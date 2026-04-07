@@ -6,7 +6,7 @@ import soundfile as sf
 import warnings
 from transformers import AutoFeatureExtractor, WavLMModel
 from sklearn.metrics.pairwise import cosine_similarity
-from ..utils import Config
+from src.utils import Config
 config = Config()
 
 SAMPLE_RATE = config.get("SAMPLE_RATE")
@@ -47,11 +47,10 @@ class WakeWordSetup:
         self.setup_history = ""
 
     def _speak(self, instruction):
-        USE_QWEN3_TTS = config.get("USE_QWEN3_TTS")
         QWEN3_LANG = config.get("QWEN3_LANG")
         from src.agent import call_ollama, clean_think_tags, clean_emojis, get_wakeword_prompt
         
-        lang = QWEN3_LANG if USE_QWEN3_TTS else "Spanish"
+        lang = QWEN3_LANG
         sys_prompt = get_wakeword_prompt(language=lang, history=self.setup_history)
         
         try:

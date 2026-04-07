@@ -7,7 +7,7 @@ import queue
 import sys
 import time
 from collections import deque
-from ..utils import Config
+from src.utils import Config
 config = Config()
 
 SAMPLE_RATE = config.get("SAMPLE_RATE")

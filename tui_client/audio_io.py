@@ -3,7 +3,7 @@ import numpy as np
 import threading
 import queue
 
-from .utils import Config
+from src.utils import Config
 config = Config()
 
 SUPPORTED_SAMPLE_RATES = [48000, 44100, 16000, 8000]
